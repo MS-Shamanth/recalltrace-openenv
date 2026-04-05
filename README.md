@@ -82,7 +82,7 @@ Build an AI-compatible environment where an agent:
 
 ---
 
-## 👁 Observation Space
+## Observation Space
 
 * Recall notice
 * Inventory snapshot
