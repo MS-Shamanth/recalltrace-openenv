@@ -1,0 +1,15 @@
+environment:
+  name: RecallTraceEnv
+  description: Minimal Phase 1 recall tracing environment skeleton
+
+interfaces:
+  actions:
+    - inspect_node
+    - trace_lot
+    - quarantine
+    - notify
+    - finalize
+  observation:
+    recall_notice: str
+    inventory: dict
+    history: list
