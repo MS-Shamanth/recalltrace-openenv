@@ -17,10 +17,30 @@ def run_smoke_test():
     print("RESET OBSERVATION:")
     print(obs)
 
+    print("\nGROUND TRUTH:")
+    print(env.state()["ground_truth"])
+
     obs, reward, done, info = env.step(
         {"type": "inspect_node", "node_id": "warehouse"}
     )
     print("\nAFTER INSPECT:")
+    print(obs)
+    print({"reward": reward, "done": done, "info": info})
+
+    obs, reward, done, info = env.step({"type": "trace_lot", "lot_id": "LotA"})
+    print("\nAFTER TRACE:")
+    print(obs)
+    print({"reward": reward, "done": done, "info": info})
+
+    obs, reward, done, info = env.step(
+        {"type": "quarantine", "node_id": "warehouse", "lot_id": "LotA", "quantity": 100}
+    )
+    print("\nAFTER QUARANTINE:")
+    print(obs)
+    print({"reward": reward, "done": done, "info": info})
+
+    obs, reward, done, info = env.step({"type": "notify", "node_id": "all"})
+    print("\nAFTER NOTIFY:")
     print(obs)
     print({"reward": reward, "done": done, "info": info})
 
