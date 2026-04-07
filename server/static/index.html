@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="stylesheet" href="/static/styles.css?v=4">
 </head>
 <body>
   <div class="page-shell">
@@ -91,36 +91,59 @@
       <section class="panel panel-wide">
         <div class="panel-header">
           <h2>Episode Output</h2>
-          <p>Step-by-step baseline actions, rewards, and final grading details.</p>
+          <p>Visual baseline trajectory, readable action summaries, and final grading highlights.</p>
         </div>
-        <div id="episode-log" class="episode-log empty-state">Run a task to populate the episode trajectory.</div>
+        <div class="episode-layout">
+          <div class="episode-visuals">
+            <div class="mini-panel">
+              <h3>Reward Curve</h3>
+              <div id="reward-chart" class="reward-chart empty-state">Run a task to render the reward trajectory.</div>
+            </div>
+            <div class="mini-panel">
+              <h3>Final Outcome</h3>
+              <div id="final-summary" class="final-summary empty-state">Readable scoring highlights will appear here.</div>
+            </div>
+          </div>
+          <div id="episode-log" class="episode-log empty-state">Run a task to populate the episode trajectory.</div>
+        </div>
       </section>
 
       <section class="panel">
         <div class="panel-header">
-          <h2>Why This Benchmark Matters</h2>
+          <h2>Judge Lens</h2>
         </div>
-        <ul class="insight-list">
-          <li>Real operational domain: product recall response across warehouses, stores, and repack nodes.</li>
-          <li>Hard task requires evidence-driven partial quarantine, not blanket blocking.</li>
-          <li>Deterministic graders score precision, notification coverage, investigation depth, and efficiency.</li>
-          <li>Designed to evaluate frontier agents on graph tracing, partial observability, and precision decisions.</li>
-        </ul>
+        <div class="highlight-stack">
+          <div class="highlight-card">
+            <span class="highlight-title">Real-world utility</span>
+            <p>Models a safety-critical recall workflow that QA, operations, and supply-chain teams actually perform.</p>
+          </div>
+          <div class="highlight-card">
+            <span class="highlight-title">Frontier challenge</span>
+            <p>The hard task forces precision containment of mixed safe and unsafe stock under partial observability.</p>
+          </div>
+          <div class="highlight-card">
+            <span class="highlight-title">Benchmark quality</span>
+            <p>Deterministic graders evaluate precision, coverage, investigation depth, and efficiency with reproducible scores.</p>
+          </div>
+        </div>
       </section>
 
       <section class="panel">
         <div class="panel-header">
-          <h2>Quick Links</h2>
+          <h2>Project Hub</h2>
         </div>
         <div class="link-list">
           <a href="/health" target="_blank" rel="noreferrer">Health endpoint</a>
           <a href="/reset" target="_blank" rel="noreferrer">Reset endpoint</a>
           <a href="/tasks" target="_blank" rel="noreferrer">Task catalog JSON</a>
+          <a href="https://github.com/MS-Shamanth/recalltrace-openenv/tree/sham" target="_blank" rel="noreferrer">GitHub source</a>
           <a href="https://huggingface.co/spaces/ms-shamanth/recalltrace-openenv/tree/main" target="_blank" rel="noreferrer">Space files</a>
+          <a href="https://www.docker.com/" target="_blank" rel="noreferrer">Docker runtime</a>
+          <a href="https://github.com/openenvai/openenv" target="_blank" rel="noreferrer">OpenEnv ecosystem</a>
         </div>
       </section>
     </main>
   </div>
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=4"></script>
 </body>
 </html>
