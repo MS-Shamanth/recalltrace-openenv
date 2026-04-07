@@ -7,7 +7,7 @@ sdk: docker
 app_port: 7860
 ---
 
-# 🚀 RecallTrace OpenEnv
+# 🚀 RecallTrace OpenEnv 
 
 RecallTrace is a **real-world AI environment** designed for **product recall tracing and precision containment**.
 
