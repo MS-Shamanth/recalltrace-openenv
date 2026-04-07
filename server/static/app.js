@@ -24,28 +24,82 @@ function renderEpisode(data) {
   currentStatus.textContent = data.success ? "Contained" : "Needs work";
 
   const logMarkup = data.logs.map((entry) => {
-    const action = JSON.stringify(entry.action);
+    const actionType = entry.action.type || "action";
+    const detailBits = [];
+    if (entry.action.node_id) detailBits.push(`Node: ${entry.action.node_id}`);
+    if (entry.action.lot_id) detailBits.push(`Lot: ${entry.action.lot_id}`);
+    if (entry.action.quantity) detailBits.push(`Qty: ${entry.action.quantity}`);
+
     return `
       <div class="log-step">
-        <strong>Step ${entry.step}</strong>
-        <div>Action: ${action}</div>
-        <div>Reward: ${entry.reward.toFixed(4)}</div>
+        <div class="log-title">
+          <strong>Step ${entry.step}</strong>
+          <span class="action-chip">${actionType.replace("_", " ")}</span>
+        </div>
+        <div class="action-meta">
+          <div>${detailBits.length ? detailBits.join(" • ") : "No extra parameters"}</div>
+          <div>Reward: ${entry.reward.toFixed(4)}</div>
+        </div>
         <div>Message: ${entry.message || "-"}</div>
       </div>
     `;
   }).join("");
 
-  const finalInfo = JSON.stringify(data.final_info, null, 2);
+  const rewardChartMarkup = data.logs.map((entry) => {
+    const normalized = Math.min(Math.abs(entry.reward), 1);
+    const width = Math.max(4, normalized * 50);
+    const polarity = entry.reward >= 0 ? "positive" : "negative";
+    return `
+      <div class="reward-row">
+        <span>S${entry.step}</span>
+        <div class="reward-track">
+          <div class="reward-bar ${polarity}" style="width:${width}%"></div>
+        </div>
+        <strong>${entry.reward.toFixed(4)}</strong>
+      </div>
+    `;
+  }).join("");
+
+  document.getElementById("reward-chart").innerHTML = rewardChartMarkup || "No step rewards yet.";
+
+  const finalSummary = `
+    <div class="summary-grid">
+      <div class="summary-pill">
+        <span>Final score</span>
+        <strong>${data.score.toFixed(4)}</strong>
+      </div>
+      <div class="summary-pill">
+        <span>Status</span>
+        <strong>${data.success ? "Success" : "Needs improvement"}</strong>
+      </div>
+      <div class="summary-pill">
+        <span>Steps used</span>
+        <strong>${data.steps_taken}</strong>
+      </div>
+      <div class="summary-pill">
+        <span>Quarantine quality</span>
+        <strong>${(data.final_info.quarantine_score ?? 0).toFixed(4)}</strong>
+      </div>
+    </div>
+    <div class="summary-card">
+      <strong>Containment outcome</strong>
+      <div>All affected nodes notified: ${data.final_info.all_affected_nodes_notified ? "Yes" : "No"}</div>
+      <div>All affected stock quarantined: ${data.final_info.all_affected_stock_quarantined ? "Yes" : "No"}</div>
+    </div>
+    <div class="summary-card">
+      <strong>Grader focus</strong>
+      <div>Notification score: ${(data.final_info.notification_score ?? 0).toFixed(4)}</div>
+      <div>Investigation score: ${(data.final_info.investigation_score ?? 0).toFixed(4)}</div>
+      <div>Efficiency score: ${(data.final_info.efficiency_score ?? 0).toFixed(4)}</div>
+    </div>
+  `;
+  document.getElementById("final-summary").innerHTML = finalSummary;
+
   episodeLog.innerHTML = `
     <div class="log-step">
       <strong>Task:</strong> ${data.task.name}
     </div>
     ${logMarkup}
-    <div class="log-step">
-      <strong>Final score:</strong> ${data.score.toFixed(4)}
-      <div><strong>Final grading payload:</strong></div>
-      <div>${finalInfo}</div>
-    </div>
   `;
 }
 

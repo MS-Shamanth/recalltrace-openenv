@@ -250,6 +250,28 @@ select option {
   background: rgba(255, 255, 255, 0.03);
 }
 
+.episode-layout {
+  display: grid;
+  grid-template-columns: 0.95fr 1.25fr;
+  gap: 18px;
+}
+
+.episode-visuals {
+  display: grid;
+  gap: 18px;
+}
+
+.mini-panel {
+  padding: 18px;
+  border-radius: 20px;
+  background: var(--panel-strong);
+  border: 1px solid var(--border);
+}
+
+.mini-panel h3 {
+  margin: 0 0 12px;
+}
+
 .episode-log,
 .all-results {
   font-family: "IBM Plex Mono", monospace;
@@ -268,6 +290,92 @@ select option {
   max-height: 240px;
   overflow-y: auto;
   padding-right: 10px;
+}
+
+.reward-chart {
+  display: grid;
+  gap: 10px;
+  min-height: 180px;
+}
+
+.reward-row {
+  display: grid;
+  grid-template-columns: 56px 1fr 72px;
+  align-items: center;
+  gap: 12px;
+}
+
+.reward-row span,
+.reward-row strong {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.86rem;
+}
+
+.reward-track {
+  position: relative;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.reward-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 999px;
+}
+
+.reward-bar.positive {
+  left: 50%;
+  background: linear-gradient(90deg, rgba(56, 211, 159, 0.45), rgba(56, 211, 159, 1));
+}
+
+.reward-bar.negative {
+  right: 50%;
+  background: linear-gradient(90deg, rgba(255, 111, 60, 1), rgba(255, 111, 60, 0.35));
+}
+
+.final-summary {
+  display: grid;
+  gap: 12px;
+}
+
+.summary-card {
+  padding: 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+}
+
+.summary-card strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.96rem;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.summary-pill {
+  padding: 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+}
+
+.summary-pill span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.82rem;
+  margin-bottom: 6px;
+}
+
+.summary-pill strong {
+  font-size: 1rem;
 }
 
 .episode-log::-webkit-scrollbar,
@@ -294,10 +402,51 @@ select option {
   color: var(--text);
 }
 
-.insight-list {
-  margin: 0;
-  padding-left: 20px;
-  line-height: 1.7;
+.log-title {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.action-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--warning-soft);
+  color: #ffd6c5;
+  border: 1px solid rgba(255, 111, 60, 0.22);
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.action-meta {
+  display: grid;
+  gap: 6px;
+}
+
+.highlight-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.highlight-card {
+  padding: 16px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+}
+
+.highlight-card p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.highlight-title {
+  color: var(--text);
+  font-weight: 700;
 }
 
 .link-list {
@@ -317,6 +466,11 @@ select option {
 @media (max-width: 960px) {
   .hero,
   .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .episode-layout,
+  .summary-grid {
     grid-template-columns: 1fr;
   }
 
