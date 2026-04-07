@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RecallTrace OpenEnv</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div class="hero-copy">
+        <span class="eyebrow">Safety-Critical OpenEnv Benchmark</span>
+        <h1>RecallTrace OpenEnv</h1>
+        <p class="hero-text">
+          A real-world supply-chain recall benchmark where agents must trace contaminated lots,
+          follow relabeled inventory lineage, inspect evidence, and quarantine only the unsafe stock.
+        </p>
+        <div class="badge-row">
+          <span class="badge">OpenEnv compliant</span>
+          <span class="badge">Deterministic grading</span>
+          <span class="badge">3 escalating tasks</span>
+          <span class="badge">Precision containment</span>
+        </div>
+      </div>
+      <div class="hero-panel">
+        <div class="metric-card">
+          <span class="metric-label">Average baseline</span>
+          <strong id="metric-average">0.9677</strong>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Hard task focus</span>
+          <strong>Mixed safe/unsafe inventory</strong>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Judging edge</span>
+          <strong>Operational realism over toy mechanics</strong>
+        </div>
+      </div>
+    </header>
+
+    <main class="dashboard-grid">
+      <section class="panel panel-accent">
+        <div class="panel-header">
+          <h2>Task Runner</h2>
+          <p>Choose a task and run the deterministic baseline to inspect the full trajectory.</p>
+        </div>
+        <div class="controls">
+          <label class="field">
+            <span>Task level</span>
+            <select id="task-select"></select>
+          </label>
+          <div class="button-row">
+            <button id="reset-button" class="button button-secondary">Reset Task</button>
+            <button id="run-button" class="button button-primary">Run Episode</button>
+            <button id="run-all-button" class="button button-ghost">Run All Tasks</button>
+          </div>
+        </div>
+        <div id="task-summary" class="task-summary"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Scoreboard</h2>
+          <p>Live summary of the current task and the multi-task baseline run.</p>
+        </div>
+        <div class="score-grid">
+          <div class="score-card">
+            <span>Current score</span>
+            <strong id="current-score">-</strong>
+          </div>
+          <div class="score-card">
+            <span>Steps taken</span>
+            <strong id="current-steps">-</strong>
+          </div>
+          <div class="score-card">
+            <span>Status</span>
+            <strong id="current-status">Ready</strong>
+          </div>
+          <div class="score-card">
+            <span>Average over all tasks</span>
+            <strong id="all-score">-</strong>
+          </div>
+        </div>
+        <div id="all-results" class="all-results empty-state">Run all tasks to compare easy, medium, and hard performance.</div>
+      </section>
+
+      <section class="panel panel-wide">
+        <div class="panel-header">
+          <h2>Episode Output</h2>
+          <p>Step-by-step baseline actions, rewards, and final grading details.</p>
+        </div>
+        <div id="episode-log" class="episode-log empty-state">Run a task to populate the episode trajectory.</div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Why This Benchmark Matters</h2>
+        </div>
+        <ul class="insight-list">
+          <li>Real operational domain: product recall response across warehouses, stores, and repack nodes.</li>
+          <li>Hard task requires evidence-driven partial quarantine, not blanket blocking.</li>
+          <li>Deterministic graders score precision, notification coverage, investigation depth, and efficiency.</li>
+          <li>Designed to evaluate frontier agents on graph tracing, partial observability, and precision decisions.</li>
+        </ul>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Quick Links</h2>
+        </div>
+        <div class="link-list">
+          <a href="/health" target="_blank" rel="noreferrer">Health endpoint</a>
+          <a href="/reset" target="_blank" rel="noreferrer">Reset endpoint</a>
+          <a href="/tasks" target="_blank" rel="noreferrer">Task catalog JSON</a>
+          <a href="https://huggingface.co/spaces/ms-shamanth/recalltrace-openenv/tree/main" target="_blank" rel="noreferrer">Space files</a>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
