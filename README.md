@@ -1,236 +1,219 @@
-# RecallTrace OpenEnv Environment
+# RecallTrace OpenEnv
 
-A fully offline OpenEnv environment simulating **product recall traceability and containment** across a supply-chain network.
+RecallTrace is a submission-grade OpenEnv environment for **product recall traceability and precision containment**. It models a real workflow that quality, operations, and supply-chain teams actually perform during a food or pharmaceutical recall:
 
----
+- map the affected batch across a distribution network,
+- follow repacked or relabeled inventory back to the source lot,
+- inspect local evidence at each node,
+- quarantine exactly the unsafe quantity,
+- notify the right downstream stakeholders,
+- close the incident with minimal business disruption.
 
-## Problem Statement
+This is not a toy. The hard task models a realistic and expensive failure mode: contaminated stock gets mixed with safe stock during cross-docking, so the agent must contain only the unsafe portion instead of blanket-blocking everything.
 
-In real-world product recalls, organizations must:
+## Why This Environment Matters
 
-* Identify **affected lot codes**
-* Trace product movement across **warehouses and stores**
-* Handle **relabeling/repacking cases**
-* Quarantine only **unsafe inventory**
-* Avoid blocking **safe stock**
+Recall-response benchmarks are rare, but they are a strong fit for agent evaluation because they combine:
 
-Mistakes can lead to:
+- graph reasoning,
+- partial observability,
+- evidence gathering,
+- precision actions under cost pressure,
+- deterministic grading.
 
-* Financial loss (over-quarantine)
-* Public safety risks (missed contamination)
-
----
-
-## Objective
-
-Build an AI-compatible environment where an agent:
-
-* Traces contaminated inventory
-* Identifies affected nodes
-* Takes precise containment actions
-* Minimizes unnecessary disruption
-
----
-
-## Environment Overview
-
-### Core Components
-
-* **Env Core**
-
-  * `reset()` → initializes recall scenario
-  * `step(action)` → processes actions
-  * `state()` → returns full internal state
-
-* **Scenario Generator**
-
-  * Shipment graph
-  * Inventory distribution
-  * Lot mappings
-  * Contamination source
-
-* **Action Handler**
-
-  * inspect_node
-  * trace_lot
-  * quarantine
-  * notify
-  * finalize
-
-* **Ground Truth (Hidden Oracle)**
-
-  * True contaminated lots
-  * Affected nodes
-  * Correct quantities
-
-* **Grader + Reward System**
-
-  * Deterministic scoring (0.0–1.0)
-  * Partial rewards and penalties
-
----
-
-## Action Space
-
-| Action                           | Description                  |
-| -------------------------------- | ---------------------------- |
-| inspect_node(node_id)            | View inventory and shipments |
-| trace_lot(lot_id)                | Trace lot across network     |
-| quarantine(node_id, lot_id, qty) | Isolate affected inventory   |
-| notify(node_id)                  | Send alert                   |
-| finalize()                       | Submit containment plan      |
-
----
-
-## Observation Space
-
-* Recall notice
-* Inventory snapshot
-* Shipment graph (partial)
-* Action history
-
----
+That makes RecallTrace useful both for RL-style environments and for benchmarking frontier LLM agents on operational decision-making.
 
 ## Tasks
 
-### 🔹 Task 1 — Direct Recall (Easy)
+### 1. `phase1_direct_recall` - Easy
 
-* Single contaminated lot
-* Simple distribution
+- One contaminated lot (`LotA`)
+- Straightforward warehouse -> store distribution
+- Goal: find every holder of the original lot and quarantine all unsafe units
 
-### 🔹 Task 2 — Relabeled Inventory (Medium)
+### 2. `phase2_relabel_recall` - Medium
 
-* Lot transformed or relabeled
+- The original contaminated lot is repacked and relabeled (`LotA_R1`, `LotA_R2`)
+- Goal: trace the lineage from the source lot to all derived labels and quarantine every affected label precisely
 
-### 🔹 Task 3 — Mixed Shipments (Hard)
+### 3. `phase3_mixed_shipments` - Hard
 
-* Safe + unsafe inventory mixed
+- Contaminated inventory is mixed with safe stock into `LotBlend`
+- Inspection reveals only part of the lot is unsafe at each node
+- Goal: quarantine the unsafe quantity only, avoid over-blocking safe stock, and still notify all affected nodes
 
----
+## Action Space
+
+| Action | Parameters | Meaning |
+| --- | --- | --- |
+| `inspect_node` | `node_id` | Inspect a warehouse/store/cross-dock node and reveal local evidence |
+| `trace_lot` | `lot_id` | Trace the root lot across relabels and downstream movement |
+| `quarantine` | `node_id`, `lot_id`, `quantity` | Move inventory from active stock to quarantine |
+| `notify` | `node_id` or `all` | Send recall notifications to one or all nodes |
+| `finalize` | none | End the episode and compute the deterministic score |
+
+## Observation Space
+
+Each `reset()` and `step()` returns a typed `RecallObservation` model with:
+
+- `task_id`
+- `phase`
+- `recall_notice`
+- `available_actions`
+- `inventory`
+- `discovered_shipments`
+- `inspected_nodes`
+- `inspection_results`
+- `trace_results`
+- `notified_nodes`
+- `quarantined_inventory`
+- `history`
+- `steps_taken`
+- `remaining_step_budget`
 
 ## Reward Design
 
-### Positive Rewards
+Trajectory rewards are shaped so the agent gets useful signal throughout the episode:
 
-* Correct tracing
-* Accurate quarantine
-* Proper notifications
+- positive reward for tracing the correct recall lineage,
+- positive reward for inspecting nodes and gathering evidence,
+- strong positive reward for exact quarantine,
+- smaller positive reward for notifying affected stakeholders,
+- negative reward for repeated low-value actions,
+- negative reward for quarantining safe stock,
+- timeout penalty if the agent exhausts the step budget.
 
-### Negative Rewards
+Final episode score is deterministic in `[0.0, 1.0]` and combines:
 
-* Over-quarantine
-* Missed contamination
-* Unnecessary actions
-
-### Final Bonus
-
-* Complete and efficient containment
-
----
+- quarantine precision,
+- notification coverage,
+- investigation coverage,
+- efficiency.
 
 ## Project Structure
 
-```
+```text
 recalltrace-openenv/
-│
-├── env/                # Environment core
-├── scenario/           # Scenario generation
-├── grader/             # Grading + reward logic
-├── inference/          # Baseline agent
-├── config/             # OpenEnv config
-├── docker/             # Docker setup
-├── requirements.txt
-└── README.md
+|-- env/
+|   |-- env.py
+|   |-- models.py
+|   `-- __init__.py
+|-- grader/
+|   `-- grader.py
+|-- inference/
+|   |-- inference.py
+|   `-- policy.py
+|-- scenario/
+|   `-- scenario.py
+|-- tests/
+|   `-- test_env.py
+|-- config/
+|   `-- openenv.yaml
+|-- Dockerfile
+|-- inference.py
+|-- openenv.yaml
+|-- requirements.txt
+|-- server.py
+`-- README.md
 ```
 
----
+## Setup
 
-## Setup Instructions
+### Install dependencies
 
-### 1. Clone Repository
-
-```
-git clone <your-repo-link>
-cd recalltrace-openenv
-```
-
-### 2. Install Dependencies
-
-```
+```bash
 pip install -r requirements.txt
 ```
 
-### 3. Run Environment
+### Run the API server locally
 
-```
-uv run server
-```
-
----
-
-## Run Inference
-
-```
-python inference/inference.py
+```bash
+uvicorn server:app --host 0.0.0.0 --port 7860
 ```
 
----
+### Run the baseline inference script
 
-## Docker Setup
-
+```bash
+python inference.py
 ```
+
+### Run unit tests
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+## OpenEnv Interface
+
+The environment implements:
+
+- typed Pydantic `RecallAction`, `RecallObservation`, and `RewardSignal` models,
+- `reset()` -> initial typed observation,
+- `step(action)` -> `(observation, reward, done, info)`,
+- `state()` -> full typed internal snapshot,
+- `openenv.yaml` metadata,
+- HTTP endpoints at `/reset`, `/step`, `/state`, `/tasks`, `/health`.
+
+## Baseline Inference
+
+The root `inference.py` file is the submission entrypoint.
+
+It:
+
+- uses the OpenAI client when `OPENAI_API_KEY` or `HF_TOKEN` is configured,
+- falls back to a deterministic heuristic policy when no model credentials are present,
+- emits structured stdout logs in `[START]`, `[STEP]`, `[END]` format,
+- evaluates all 3 tasks,
+- reports reproducible scores.
+
+Environment variables:
+
+- `API_BASE_URL` - API endpoint for model inference
+- `MODEL_NAME` - model identifier
+- `OPENAI_API_KEY` or `HF_TOKEN` - credential for the OpenAI-compatible endpoint
+
+## Baseline Scores
+
+Current deterministic heuristic baseline:
+
+- `phase1_direct_recall`: ~0.9700
+- `phase2_relabel_recall`: ~0.9643
+- `phase3_mixed_shipments`: ~0.9688
+- average: ~0.9677
+
+These scores are reproducible because the environment is deterministic and the fallback heuristic is deterministic.
+
+## Docker
+
+Build and run locally:
+
+```bash
 docker build -t recalltrace .
-docker run recalltrace
+docker run -p 7860:7860 recalltrace
 ```
 
----
+## Hugging Face Spaces
 
-## OpenEnv Compliance
+This repo is container-ready for a Docker-based HF Space.
 
-* Implements `reset()`, `step()`, `state()`
-* Uses typed models (Pydantic)
-* Includes `openenv.yaml`
-* Passes `openenv validate`
+Recommended launch command is already encoded in the root `Dockerfile`:
 
----
+```text
+uvicorn server:app --host 0.0.0.0 --port 7860
+```
 
-## Evaluation
+## Deterministic Grading
 
-* Deterministic grading
-* Score range: **0.0 → 1.0**
-* Based on:
+Programmatic graders live in `grader/grader.py` and can:
 
-  * Accuracy
-  * Completeness
-  * Efficiency
+- replay a full action plan against any task,
+- compute a deterministic `TaskGrade`,
+- validate that final scores remain within `[0.0, 1.0]`.
 
----
+## What Makes It Novel
 
-## Key Features
-
-* Real-world industrial problem
-* Multi-step reasoning (graph + logic)
-* Offline and reproducible
-* Easy to evaluate and benchmark
-
----
-
-## Goal
-
-Build a **real-world, deterministic, OpenEnv-compliant environment** that enables AI agents to solve complex supply-chain recall problems efficiently.
-
----
-
-## Team
-
-* Shamanth MS
-* P G Ayush Rai
-* Shreya B J
-
----
-
-## Submission
-
-* Hugging Face Space: *(Add link here)*
-
----
+- uncommon real-world domain for OpenEnv,
+- graph tracing plus evidence collection,
+- relabel lineage reasoning,
+- mixed-lot precision containment,
+- explicit tradeoff between safety and operational disruption.
