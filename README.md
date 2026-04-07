@@ -1,3 +1,13 @@
+---
+title: RecallTrace OpenEnv
+emoji: 🚨
+colorFrom: red
+colorTo: blue
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # RecallTrace OpenEnv
 
 RecallTrace is a submission-grade OpenEnv environment for **product recall traceability and precision containment**. It models a real workflow that quality, operations, and supply-chain teams actually perform during a food or pharmaceutical recall:
