@@ -285,7 +285,7 @@ def evaluate_baseline(num_episodes: int = 50) -> dict:
                 total_r += reward
             if done:
                 break
-        scores.append(info.get("score", 0.0))
+        scores.append(info.get("score") or 0.0)
     avg = sum(scores) / len(scores)
     print(f"  Random baseline: avg score = {avg:.4f}")
     return {"avg_score": avg, "scores": scores}
@@ -305,7 +305,7 @@ def evaluate_heuristic(num_episodes: int = 50) -> dict:
             obs, reward, done, info = env.step(action)
             if done:
                 break
-        scores.append(info.get("score", 0.0))
+        scores.append(info.get("score") or 0.0)
     avg = sum(scores) / len(scores)
     print(f"  Heuristic baseline: avg score = {avg:.4f}")
     return {"avg_score": avg, "scores": scores}
@@ -350,7 +350,7 @@ def evaluate_trained(model, tokenizer, num_episodes: int = 50) -> dict:
             if done:
                 break
 
-        scores.append(info.get("score", 0.0))
+        scores.append(info.get("score") or 0.0)
 
     avg = sum(scores) / len(scores)
     print(f"  Trained model: avg score = {avg:.4f}")
