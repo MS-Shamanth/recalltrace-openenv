@@ -187,20 +187,19 @@ def train_sft(dataset_dicts: list[dict], num_epochs: int = 3, max_steps: int = -
         use_gradient_checkpointing="unsloth",
     )
 
-    # Create dataset
-    dataset = Dataset.from_list(dataset_dicts)
-    print(f"  Dataset size: {len(dataset)} samples")
+    # Pre-format messages into text strings (avoids Unsloth formatting_func issues)
+    print("  Formatting dataset...")
+    formatted_data = []
+    for item in dataset_dicts:
+        text = tokenizer.apply_chat_template(
+            item["messages"],
+            tokenize=False,
+            add_generation_prompt=False,
+        )
+        formatted_data.append({"text": text})
 
-    # Formatting function — Unsloth requires a batch → list[str]
-    def formatting_func(examples):
-        texts = []
-        for msgs in examples["messages"]:
-            texts.append(tokenizer.apply_chat_template(
-                msgs,
-                tokenize=False,
-                add_generation_prompt=False,
-            ))
-        return texts
+    dataset = Dataset.from_list(formatted_data)
+    print(f"  Dataset size: {len(dataset)} samples")
 
     # Training config
     training_args = SFTConfig(
@@ -217,6 +216,7 @@ def train_sft(dataset_dicts: list[dict], num_epochs: int = 3, max_steps: int = -
         save_total_limit=2,
         fp16=True,
         max_seq_length=2048,
+        dataset_text_field="text",
         seed=42,
         report_to="none",
     )
@@ -225,7 +225,6 @@ def train_sft(dataset_dicts: list[dict], num_epochs: int = 3, max_steps: int = -
         model=model,
         tokenizer=tokenizer,
         train_dataset=dataset,
-        formatting_func=formatting_func,
         args=training_args,
     )
 
