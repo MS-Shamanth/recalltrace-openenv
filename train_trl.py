@@ -191,6 +191,14 @@ def train_sft(dataset_dicts: list[dict], num_epochs: int = 3, max_steps: int = -
     dataset = Dataset.from_list(dataset_dicts)
     print(f"  Dataset size: {len(dataset)} samples")
 
+    # Formatting function required by Unsloth's SFTTrainer
+    def formatting_func(example):
+        return tokenizer.apply_chat_template(
+            example["messages"],
+            tokenize=False,
+            add_generation_prompt=False,
+        )
+
     # Training config
     training_args = SFTConfig(
         output_dir=str(OUTPUT_DIR),
@@ -214,6 +222,7 @@ def train_sft(dataset_dicts: list[dict], num_epochs: int = 3, max_steps: int = -
         model=model,
         tokenizer=tokenizer,
         train_dataset=dataset,
+        formatting_func=formatting_func,
         args=training_args,
     )
 
