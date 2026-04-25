@@ -1,4 +1,4 @@
-"""FastAPI server for serving RecallTrace in Docker or Hugging Face Spaces."""
+﻿"""FastAPI server for serving RecallTrace in Docker or Hugging Face Spaces."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 import uvicorn
-from fastapi import FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -64,7 +64,8 @@ def reset_get(task_id: Optional[str] = None, phase: Optional[int] = None) -> dic
 
 
 @app.post("/reset")
-def reset_post(request: ResetRequest) -> dict:
+def reset_post(request: ResetRequest | None = Body(default=None)) -> dict:
+    request = request or ResetRequest()
     try:
         return ACTIVE_ENV.reset(task_id=request.task_id, phase=request.phase).model_dump()
     except Exception as exc:
@@ -150,3 +151,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

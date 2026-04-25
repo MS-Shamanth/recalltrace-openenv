@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RecallTrace — Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0a12;
+    --bg-card: #12121e;
+    --border: rgba(255,255,255,0.06);
+    --text: #e2e4ea;
+    --text-dim: #8b8fa3;
+    --text-bright: #ffffff;
+
+    /* Layer colors */
+    --purple: #7c3aed;
+    --purple-glow: rgba(124,58,237,0.15);
+    --red: #a83232;
+    --red-glow: rgba(168,50,50,0.15);
+    --teal: #0d9488;
+    --teal-glow: rgba(13,148,136,0.12);
+    --amber: #d97706;
+    --amber-glow: rgba(217,119,6,0.12);
+    --emerald: #059669;
+    --rose: #e11d48;
+    --sky: #0284c7;
+    --indigo: #4f46e5;
+    --indigo-glow: rgba(79,70,229,0.15);
+    --dteal: #0f766e;
+    --dteal-glow: rgba(15,118,110,0.12);
+
+    --connector: rgba(255,255,255,0.10);
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Page header ── */
+  .page-header {
+    text-align: center;
+    padding: 48px 24px 12px;
+  }
+  .page-header .badge {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--purple);
+    border: 1px solid rgba(124,58,237,0.3);
+    border-radius: 100px;
+    padding: 6px 18px;
+    margin-bottom: 18px;
+    background: rgba(124,58,237,0.06);
+  }
+  .page-header h1 {
+    font-size: 36px;
+    font-weight: 800;
+    color: var(--text-bright);
+    letter-spacing: -0.5px;
+    line-height: 1.2;
+  }
+  .page-header h1 span { color: var(--purple); }
+  .page-header .subtitle {
+    font-size: 15px;
+    color: var(--text-dim);
+    margin-top: 10px;
+    font-weight: 400;
+    max-width: 640px;
+    margin-left: auto;
+    margin-right: auto;
+    line-height: 1.55;
+  }
+
+  /* ── Flow container ── */
+  .flow {
+    max-width: 920px;
+    margin: 0 auto;
+    padding: 32px 24px 64px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  /* ── Connector line between layers ── */
+  .connector {
+    display: flex;
+    justify-content: center;
+    padding: 6px 0;
+  }
+  .connector .line {
+    width: 2px;
+    height: 32px;
+    background: linear-gradient(to bottom, var(--connector), rgba(255,255,255,0.04));
+    position: relative;
+  }
+  .connector .line::after {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid var(--connector);
+  }
+
+  /* ── Layer card (shared) ── */
+  .layer {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px 32px;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.25s ease, box-shadow 0.3s ease;
+  }
+  .layer:hover {
+    transform: translateY(-2px);
+  }
+  .layer::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    border-radius: 16px 16px 0 0;
+  }
+
+  /* ── Layer header ── */
+  .layer-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 16px;
+  }
+  .layer-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+  .layer-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-bright);
+    letter-spacing: -0.2px;
+  }
+  .layer-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-left: auto;
+    flex-shrink: 0;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── Layer body ── */
+  .layer-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .layer-body .item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--text);
+  }
+  .layer-body .item .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 7px;
+  }
+  .layer-body .item strong {
+    color: var(--text-bright);
+    font-weight: 600;
+  }
+  .layer-body .item code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    background: rgba(255,255,255,0.05);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: inherit;
+  }
+
+  /* ── Split row (for reward) ── */
+  .split-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin-top: 4px;
+  }
+  .split-cell {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    text-align: center;
+  }
+  .split-cell .sc-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .split-cell .sc-value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+  .split-cell .sc-desc {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+
+  /* ── Demo grid (layer 7) ── */
+  .demo-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 4px;
+  }
+  .demo-card {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+  .demo-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 700;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    flex-shrink: 0;
+  }
+  .demo-text {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text);
+  }
+  .demo-text strong { color: var(--text-bright); font-weight: 600; }
+
+  /* ── Tool columns (layer 3) ── */
+  .tool-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin-top: 4px;
+  }
+  .tool-col {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .tool-col-title {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .tool-col .tool-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    line-height: 1.4;
+    margin-bottom: 6px;
+  }
+  .tool-col .tool-item code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    background: rgba(255,255,255,0.06);
+    padding: 2px 7px;
+    border-radius: 4px;
+  }
+  .tool-col .tool-item .desc {
+    font-size: 11.5px;
+    color: var(--text-dim);
+  }
+
+  /* ── Color variants ── */
+  /* Layer 1: Purple */
+  .layer.l1 { box-shadow: 0 0 40px var(--purple-glow); }
+  .layer.l1::before { background: linear-gradient(90deg, var(--purple), #a855f7); }
+  .layer.l1:hover { box-shadow: 0 0 60px var(--purple-glow); }
+  .layer.l1 .layer-num { background: rgba(124,58,237,0.15); color: #a78bfa; }
+  .layer.l1 .dot { background: var(--purple); }
+  .layer.l1 .layer-tag { background: rgba(124,58,237,0.12); color: #a78bfa; }
+
+  /* Layer 2: Red */
+  .layer.l2 { box-shadow: 0 0 40px var(--red-glow); }
+  .layer.l2::before { background: linear-gradient(90deg, var(--red), #c53030); }
+  .layer.l2:hover { box-shadow: 0 0 60px var(--red-glow); }
+  .layer.l2 .layer-num { background: rgba(168,50,50,0.18); color: #fc8181; }
+  .layer.l2 .dot { background: var(--red); }
+  .layer.l2 .layer-tag { background: rgba(168,50,50,0.15); color: #fc8181; }
+
+  /* Layer 3: Teal */
+  .layer.l3 { box-shadow: 0 0 40px var(--teal-glow); }
+  .layer.l3::before { background: linear-gradient(90deg, var(--teal), #14b8a6); }
+  .layer.l3:hover { box-shadow: 0 0 60px var(--teal-glow); }
+  .layer.l3 .layer-num { background: rgba(13,148,136,0.15); color: #5eead4; }
+  .layer.l3 .dot { background: var(--teal); }
+  .layer.l3 .layer-tag { background: rgba(13,148,136,0.12); color: #5eead4; }
+  .layer.l3 .tool-col-title { color: #5eead4; }
+
+  /* Layer 4: Amber */
+  .layer.l4 { box-shadow: 0 0 40px var(--amber-glow); }
+  .layer.l4::before { background: linear-gradient(90deg, var(--amber), #f59e0b); }
+  .layer.l4:hover { box-shadow: 0 0 60px var(--amber-glow); }
+  .layer.l4 .layer-num { background: rgba(217,119,6,0.15); color: #fbbf24; }
+  .layer.l4 .dot { background: var(--amber); }
+  .layer.l4 .layer-tag { background: rgba(217,119,6,0.12); color: #fbbf24; }
+
+  /* Layer 5: Multi */
+  .layer.l5 { box-shadow: 0 0 30px rgba(255,255,255,0.03); }
+  .layer.l5::before { background: linear-gradient(90deg, var(--emerald), var(--rose), var(--sky)); }
+  .layer.l5 .layer-num { background: rgba(255,255,255,0.06); color: var(--text); }
+
+  /* Layer 6: Indigo */
+  .layer.l6 { box-shadow: 0 0 40px var(--indigo-glow); }
+  .layer.l6::before { background: linear-gradient(90deg, var(--indigo), #6366f1); }
+  .layer.l6:hover { box-shadow: 0 0 60px var(--indigo-glow); }
+  .layer.l6 .layer-num { background: rgba(79,70,229,0.15); color: #818cf8; }
+  .layer.l6 .dot { background: var(--indigo); }
+  .layer.l6 .layer-tag { background: rgba(79,70,229,0.12); color: #818cf8; }
+
+  /* Layer 7: Dark teal */
+  .layer.l7 { box-shadow: 0 0 40px var(--dteal-glow); }
+  .layer.l7::before { background: linear-gradient(90deg, var(--dteal), #0d9488); }
+  .layer.l7:hover { box-shadow: 0 0 60px var(--dteal-glow); }
+  .layer.l7 .layer-num { background: rgba(15,118,110,0.15); color: #5eead4; }
+  .layer.l7 .demo-num { background: rgba(15,118,110,0.2); color: #5eead4; }
+
+  /* ── Footer ── */
+  .page-footer {
+    text-align: center;
+    padding: 24px;
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.5px;
+    border-top: 1px solid var(--border);
+    margin-top: 24px;
+  }
+  .page-footer span { color: var(--purple); font-weight: 600; }
+
+  /* ── Entry animations ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(24px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .layer, .connector {
+    opacity: 0;
+    animation: fadeUp 0.5s ease forwards;
+  }
+  .flow > :nth-child(1)  { animation-delay: 0.08s; }
+  .flow > :nth-child(2)  { animation-delay: 0.16s; }
+  .flow > :nth-child(3)  { animation-delay: 0.24s; }
+  .flow > :nth-child(4)  { animation-delay: 0.32s; }
+  .flow > :nth-child(5)  { animation-delay: 0.40s; }
+  .flow > :nth-child(6)  { animation-delay: 0.48s; }
+  .flow > :nth-child(7)  { animation-delay: 0.56s; }
+  .flow > :nth-child(8)  { animation-delay: 0.64s; }
+  .flow > :nth-child(9)  { animation-delay: 0.72s; }
+  .flow > :nth-child(10) { animation-delay: 0.80s; }
+  .flow > :nth-child(11) { animation-delay: 0.88s; }
+  .flow > :nth-child(12) { animation-delay: 0.96s; }
+  .flow > :nth-child(13) { animation-delay: 1.04s; }
+
+  .page-header { animation: fadeUp 0.5s ease forwards; }
+</style>
+</head>
+<body>
+
+<header class="page-header">
+  <div class="badge">Meta PyTorch OpenEnv Hackathon 2025</div>
+  <h1>Recall<span>Trace</span> — System Architecture</h1>
+  <p class="subtitle">Causal inference benchmark with adversarial self-play. An agent identifies hidden interventions in partially observable contamination graphs while an adversary adapts the difficulty.</p>
+</header>
+
+<div class="flow">
+
+  <!-- ═══ LAYER 1: Causal Graph Engine ═══ -->
+  <div class="layer l1">
+    <div class="layer-header">
+      <span class="layer-num">LAYER 1</span>
+      <span class="layer-title">Causal Graph Engine</span>
+      <span class="layer-tag">THE REAL INNOVATION</span>
+    </div>
+    <div class="layer-body">
+      <div class="item">
+        <span class="dot"></span>
+        <span><strong>Nodes</strong> = lots, warehouses, crossdocks, retailers. <strong>Edges</strong> = shipment and repack events. <strong>Hidden edges</strong> = the inference problem.</span>
+      </div>
+      <div class="item">
+        <span class="dot"></span>
+        <span>Ground truth is a <strong>DAG with latent interventions</strong> — the agent never sees it directly. 30–50% of edges are hidden at episode start.</span>
+      </div>
+      <div class="item">
+        <span class="dot"></span>
+        <span>Each <code>reset()</code> generates a unique procedural graph. No two episodes share the same topology or contamination pattern.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div class="line"></div></div>
+
+  <!-- ═══ LAYER 2: Hidden Intervention Layer ═══ -->
+  <div class="layer l2">
+    <div class="layer-header">
+      <span class="layer-num">LAYER 2</span>
+      <span class="layer-title">Hidden Intervention Layer</span>
+      <span class="layer-tag">CAUSAL, NOT CORRELATIONAL</span>
+    </div>
+    <div class="layer-body">
+      <div class="item">
+        <span class="dot"></span>
+        <span><strong>3 intervention types</strong> sampled per episode: <code>lot_relabel</code>, <code>mixing_event</code>, <code>record_deletion</code></span>
+      </div>
+      <div class="item">
+        <span class="dot"></span>
+        <span>Agent must infer <strong>which</strong> intervention occurred — not just where contamination spread. This is <strong>causal reasoning</strong>, not graph traversal.</span>
+      </div>
+      <div class="item">
+        <span class="dot"></span>
+        <span>Adversary chooses placement: <strong>source</strong>, <strong>midstream</strong>, or <strong>downstream</strong> nodes. Adds decoys, red herrings, and phantom lots.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div class="line"></div></div>
+
+  <!-- ═══ LAYER 3: Agent Tool Calls ═══ -->
+  <div class="layer l3">
+    <div class="layer-header">
+      <span class="layer-num">LAYER 3</span>
+      <span class="layer-title">Agent Tool Calls</span>
+      <span class="layer-tag">3 CATEGORIES</span>
+    </div>
+    <div class="tool-columns">
+      <div class="tool-col">
+        <div class="tool-col-title">🔍 Observe</div>
+        <div class="tool-item"><code>inspect_node()</code></div>
+        <div class="tool-item"><span class="desc">Reveals hidden edges and local evidence at a node</span></div>
+        <div class="tool-item" style="margin-top:6px"><code>trace_lot()</code></div>
+        <div class="tool-item"><span class="desc">Returns full movement history of a lot ID</span></div>
+      </div>
+      <div class="tool-col">
+        <div class="tool-col-title">🧠 Hypothesize</div>
+        <div class="tool-item"><code>cross_reference()</code></div>
+        <div class="tool-item"><span class="desc">Checks shared origin between two lots</span></div>
+        <div class="tool-item" style="margin-top:6px"><code>request_lab_test()</code></div>
+        <div class="tool-item"><span class="desc">Confirms contamination at a specific node</span></div>
+      </div>
+      <div class="tool-col">
+        <div class="tool-col-title">✅ Commit</div>
+        <div class="tool-item"><code>quarantine()</code></div>
+        <div class="tool-item"><span class="desc">Containment action — penalized if target is safe</span></div>
+        <div class="tool-item" style="margin-top:6px"><code>finalize()</code></div>
+        <div class="tool-item"><span class="desc">Triggers ground truth evaluation and scoring</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div class="line"></div></div>
+
+  <!-- ═══ LAYER 4: Belief State Tracker ═══ -->
+  <div class="layer l4">
+    <div class="layer-header">
+      <span class="layer-num">LAYER 4</span>
+      <span class="layer-title">Belief State Tracker</span>
+      <span class="layer-tag">THEME 3.1 — WORLD MODELING</span>
+    </div>
+    <div class="layer-body">
+      <div class="item">
+        <span class="dot"></span>
+        <span>After each tool call, environment returns: <strong>P(edge exists)</strong> per hidden arc, <strong>P(contaminated)</strong> per node.</span>
+      </div>
+      <div class="item">
+        <span class="dot"></span>
+        <span>Agent decides: is this belief <strong>certain enough to quarantine</strong>, or should it spend a step to reduce entropy?</span>
+      </div>
+      <div class="item">
+        <span class="dot"></span>
+        <span>Trained agent learns to <strong>stop gathering evidence</strong> when marginal information gain &lt; step cost. Untrained agent over-explores.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div class="line"></div></div>
+
+  <!-- ═══ LAYER 5: Composable Reward ═══ -->
+  <div class="layer l5">
+    <div class="layer-header">
+      <span class="layer-num">LAYER 5</span>
+      <span class="layer-title">Composable Reward</span>
+    </div>
+    <div class="split-row">
+      <div class="split-cell">
+        <div class="sc-label" style="color: #34d399;">RECALL</div>
+        <div class="sc-value" style="color: #34d399;">+2.0</div>
+        <div class="sc-desc">per unsafe lot correctly quarantined</div>
+      </div>
+      <div class="split-cell">
+        <div class="sc-label" style="color: #fb7185;">PRECISION</div>
+        <div class="sc-value" style="color: #fb7185;">−1.5</div>
+        <div class="sc-desc">per safe lot incorrectly blocked</div>
+      </div>
+      <div class="split-cell">
+        <div class="sc-label" style="color: #38bdf8;">CALIBRATION</div>
+        <div class="sc-value" style="color: #38bdf8;">+0.3</div>
+        <div class="sc-desc">if P(contam) &gt; 0.8 before quarantine</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div class="line"></div></div>
+
+  <!-- ═══ LAYER 6: Adversarial Curriculum ═══ -->
+  <div class="layer l6">
+    <div class="layer-header">
+      <span class="layer-num">LAYER 6</span>
+      <span class="layer-title">Adversarial Curriculum</span>
+      <span class="layer-tag">THEME 4 — SELF-PLAY</span>
+    </div>
+    <div class="layer-body">
+      <div class="item">
+        <span class="dot"></span>
+        <span><strong>Replaces static difficulty tiers.</strong> Adversary agent tracks investigator failure modes and adapts episode generation.</span>
+      </div>
+      <div class="item">
+        <span class="dot"></span>
+        <span>If agent <strong>over-quarantines</strong> → next episode has more safe stock (decoys, false positives). If agent <strong>under-quarantines</strong> → next episode adds more hidden relabel hops.</span>
+      </div>
+      <div class="item">
+        <span class="dot"></span>
+        <span><strong>Recursive skill amplification:</strong> both agents improve simultaneously. The benchmark teaches itself to be harder. Neither agent was told the strategies they discover.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div class="line"></div></div>
+
+  <!-- ═══ LAYER 7: What Judges See ═══ -->
+  <div class="layer l7">
+    <div class="layer-header">
+      <span class="layer-num">LAYER 7</span>
+      <span class="layer-title">What Judges See</span>
+    </div>
+    <div class="demo-grid">
+      <div class="demo-card">
+        <span class="demo-num">1</span>
+        <div class="demo-text">
+          <strong>Procedural generation</strong> — <code>reset()</code> live: new graph, new hidden intervention sampled, unique topology every episode
+        </div>
+      </div>
+      <div class="demo-card">
+        <span class="demo-num">2</span>
+        <div class="demo-text">
+          <strong>World modeling visible</strong> — belief tracker panel shows P(contaminated) rising as agent inspects nodes in real time
+        </div>
+      </div>
+      <div class="demo-card">
+        <span class="demo-num">3</span>
+        <div class="demo-text">
+          <strong>Two orthogonal improvements</strong> — F1 curve 0.24→0.79 <em>and</em> belief calibration score rising together over 200 episodes
+        </div>
+      </div>
+      <div class="demo-card">
+        <span class="demo-num">4</span>
+        <div class="demo-text">
+          <strong>Learning is legible</strong> — side-by-side: untrained scattershots 6 nodes vs trained agent stops when P &gt; 0.85 with 2 precise quarantines
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<footer class="page-footer">
+  <span>RecallTrace</span> · Causal Inference Under Adversarial Self-Play · Themes 3.1 + 4 + 1
+</footer>
+
+</body>
+</html>
