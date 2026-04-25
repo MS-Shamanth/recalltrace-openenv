@@ -423,6 +423,19 @@ def main():
     print("  Unsloth + TRL (SFT on Expert Demonstrations)")
     print("="*60)
 
+    # GPU check — fail fast before wasting time on data generation
+    if not args.data_only:
+        import torch
+        if not torch.cuda.is_available():
+            print("\n  ❌ ERROR: No GPU detected!")
+            print("  Unsloth requires a CUDA GPU.")
+            print("\n  In Google Colab:")
+            print("    Runtime → Change runtime type → T4 GPU → Save")
+            print("    Then reconnect and re-run all cells.\n")
+            sys.exit(1)
+        gpu_name = torch.cuda.get_device_name(0)
+        print(f"\n  ✅ GPU detected: {gpu_name}")
+
     # Phase 1: Generate expert data
     expert_data = generate_expert_data(num_episodes=args.episodes)
 
