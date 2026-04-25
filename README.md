@@ -13,6 +13,7 @@ pinned: false
 ```bash
 pip install -r requirements.txt
 python run_selfplay.py
+```
 
 # RecallTrace: Causal Inference via Adversarial Self-Play
 
