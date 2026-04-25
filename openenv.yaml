@@ -1,0 +1,48 @@
+name: RecallTraceEnv
+version: 1.0.0
+description: Deterministic OpenEnv environment for supply-chain product recall tracing and precision containment.
+entrypoint:
+  module: env.env
+  class: RecallTraceEnv
+server:
+  module: server
+  app: app
+models:
+  action: env.models.RecallAction
+  observation: env.models.RecallObservation
+  reward: env.models.RewardSignal
+tasks:
+  - id: phase1_direct_recall
+    difficulty: easy
+    objective: Identify every location holding the recalled lot and quarantine all contaminated stock.
+  - id: phase2_relabel_recall
+    difficulty: medium
+    objective: Follow relabeled lots back to the source batch and quarantine every derived label precisely.
+  - id: phase3_mixed_shipments
+    difficulty: hard
+    objective: Contain only the unsafe quantity after contaminated stock was mixed with safe inventory during cross-docking.
+interfaces:
+  methods:
+    - reset
+    - step
+    - state
+  actions:
+    - inspect_node
+    - trace_lot
+    - quarantine
+    - notify
+    - finalize
+observation_fields:
+  - task_id
+  - phase
+  - recall_notice
+  - inventory
+  - discovered_shipments
+  - inspected_nodes
+  - inspection_results
+  - trace_results
+  - notified_nodes
+  - quarantined_inventory
+  - history
+  - steps_taken
+  - remaining_step_budget
