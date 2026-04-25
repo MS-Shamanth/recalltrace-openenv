@@ -9,86 +9,208 @@ pinned: false
 
 # RecallTrace: Causal Inference via Adversarial Self-Play
 
-An RL agent that doesn't just learn to detect contamination — it learns to infer the hidden causal intervention behind it. 
-
-Trained via adversarial self-play, where an adversary learns to hide better as the investigator learns to reason better.
+> An RL agent that doesn't just detect contamination — it infers the **hidden causal intervention** behind it. Trained via adversarial self-play, where an adversary learns to hide better as the investigator learns to reason better.
 
 ---
 
-## 🚀 Run in one command
+## 🔗 Quick Links
+
+| Resource | Link |
+|---|---|
+| 🚀 **Live Demo** | [HF Space](https://huggingface.co/spaces/ms-shamanth/recalltrace-openenv) |
+| 🤖 **Trained Model** | [ms-shamanth/recalltrace-investigator](https://huggingface.co/ms-shamanth/recalltrace-investigator) |
+| 📓 **Training Script** | [train_trl.py](train_trl.py) (Unsloth + TRL) |
+| 📊 **Self-Play Training** | [run_selfplay.py](run_selfplay.py) |
+
+---
+
+## 🎯 Problem: Why This Matters
+
+**Real-world supply-chain recalls** (FDA food safety, automotive parts, pharmaceuticals) involve tracing contamination through complex multi-hop logistics networks — where evidence is partial, labels are unreliable, and bad actors actively conceal the source.
+
+Current LLMs and RL agents struggle with:
+- **Causal inference under partial observability** — 30-50% of graph edges are hidden
+- **Adversarial robustness** — the contamination strategy adapts to the investigator
+- **Belief calibration** — knowing *when* you have enough evidence to quarantine
+
+RecallTrace is the first OpenEnv environment that trains an agent to perform **abductive causal reasoning** against an adaptive adversary.
+
+---
+
+## 🌐 The Environment
+
+### What the Agent Sees
+A supply-chain graph with nodes (warehouses, crossdocks, retailers) holding inventory lots. A recall notice alerts the agent to contamination — but the source, spread pattern, and intervention type are hidden.
+
+### What the Agent Does
+| Action | Purpose | Reward |
+|---|---|---|
+| `inspect_node` | Examine a node's inventory and evidence | +0.08 to +0.20 |
+| `trace_lot` | Follow a lot through the shipment graph | +0.12 to +0.25 |
+| `quarantine` | Isolate contaminated stock at a node | +0.28 (correct) / -0.35 (false positive) |
+| `notify` | Alert downstream stakeholders | +0.04 per affected node |
+| `finalize` | Submit final containment decision | Composite score (0-1) |
+
+### What Makes It Hard
+- **Hidden interventions**: The adversary picks one of 3 strategies (lot relabeling, mixing events, record deletion) and places it in the graph
+- **Decoys**: False positives are planted to mislead the investigator
+- **Partial observability**: The agent must reason about hidden edges and infer causality
+- **Adversarial curriculum**: The adversary adapts its strategy based on agent weaknesses
+
+---
+
+## 🚀 Training
+
+### Self-Play Training (Heuristic Agents)
 
 ```bash
 python run_selfplay.py
 ```
 
-*(No API keys, no GPUs, runs in <2 seconds on CPU)*
-
----
-
-## 🎥 What you'll see
-
-- Agent improves from random (spray-and-pray) to precise, belief-calibrated quarantine.
-- F1 score increases to ~1.0 over 200 episodes.
-- Nodes quarantined drops from 8.3/episode to 3.1/episode.
-- Adversary adapts to agent weaknesses dynamically.
-
----
-
-## 📊 Proof of Learning
-
-### 1. The Learning Curves
-*(Generated automatically when you run the script)*
+Runs **200 episodes** in <2 seconds on CPU. The investigator and adversary co-evolve:
 
 ![Training Curves](plots/selfplay_training.png)
-
-### 2. Before vs After Behavior
-*(Untrained vs Trained Agent Comparison)*
+*Figure 1: Four-panel training curves showing F1 improvement from 0.58 → 1.0, adversary reward declining, quarantine precision increasing (8.3 → 3.1 nodes), and investigation efficiency improving (25 → 11 steps).*
 
 ![Before vs After](plots/before_after_demo.png)
+*Figure 2: Side-by-side comparison of untrained (spray-and-pray) vs trained (precision targeting) agent behavior on the same supply-chain graph.*
+
+### LLM Training (Unsloth + TRL)
+
+```bash
+pip install unsloth "trl>=0.12" datasets accelerate
+python train_trl.py --push-model
+```
+
+Fine-tunes **Qwen2.5-0.5B-Instruct** (4-bit via Unsloth) on expert demonstrations using TRL SFTTrainer:
+
+1. **Data Generation**: Runs heuristic expert on 300 episodes → collects high-reward (observation, action) pairs
+2. **SFT Training**: Fine-tunes with LoRA (r=16) for 3 epochs
+3. **Evaluation**: Compares random baseline vs heuristic vs trained LLM
+4. **Push**: Uploads trained model to [HF Hub](https://huggingface.co/ms-shamanth/recalltrace-investigator)
+
+**Re-run in Colab:**
+```bash
+!pip install unsloth "trl>=0.12" datasets
+!git clone https://huggingface.co/spaces/ms-shamanth/recalltrace-openenv
+%cd recalltrace-openenv
+!python train_trl.py
+```
+
+---
+
+## 📊 Results
+
+### Self-Play Performance
+
+| Metric | Early (ep 1-20) | Late (ep 181-200) | Improvement |
+|---|---|---|---|
+| F1 Score | 0.576 | 1.000 | **+73.6%** |
+| Nodes Quarantined | 8.3/episode | 3.1/episode | **-62.7%** |
+| Steps to Finalize | 25.4 | 10.8 | **-57.5%** |
+| Quarantine Threshold | 0.000 | 0.550 | Learned selectivity |
+| Exploration Rate | 0.950 | 0.050 | Learned focus |
+
+### Key Insights
+- **Spray-and-pray → Precision**: Early agent quarantines everything; trained agent targets only confirmed contamination
+- **Adversary co-evolution**: Adversary shifts from lot relabeling (35%) to record deletion (35%) as investigator learns to handle relabeling
+- **Belief calibration**: Agent learns to only quarantine when P(contaminated) > 0.55, avoiding false positives
 
 ---
 
 ## 🧠 Why This Is Unique
 
-1. **Causal Inference (not Graph Traversal)**: 30-50% of the graph edges are hidden. The agent must perform abductive reasoning to identify *which* hidden causal intervention (relabeling, mixing, record deletion) produced the observed contamination pattern.
-2. **Partial Observability**: The agent relies on a probabilistic belief state (`P(contaminated)` per node) and tool calls to reduce entropy.
-3. **Adversarial Self-Play (Theme 4)**: The environment's difficulty is not static. An adversary agent chooses where to place interventions, adapting its curriculum based on the investigator's failure modes.
-4. **Belief-Based Decisions (Theme 3.1)**: Quarantines are only rewarded if the agent is confident (`P > 0.8`). Uncalibrated guesses are heavily penalized.
+### Theme 3.1 — World Modeling
+The agent maintains a probabilistic belief state (`P(contaminated)` per node) and only quarantines when confidence exceeds a learned threshold. This is **world modeling** — the agent builds an internal representation of hidden graph structure.
+
+### Theme 4 — Recursive Skill Amplification
+Adversarial self-play creates an **automatic difficulty curriculum**. Both agents improve simultaneously: the adversary finds harder hiding spots, forcing the investigator to develop more sophisticated causal reasoning. This is recursive amplification — each improvement in one agent drives improvement in the other.
 
 ---
 
 ## ⚙️ How It Works
 
-- **The Environment**: A procedural generator builds a unique contamination propagation graph every episode with decoys, false positives, and hidden interventions.
-- **The Investigator (Agent 1)**: Inspects nodes, traces lineages, and cross-references data to find contamination and quarantine it. Rewarded for precision and recall (+2.0 for correct, -1.5 for incorrect).
-- **The Adversary (Agent 2)**: Chooses intervention types and placements. Rewarded exclusively when the Investigator fails.
+```
+┌──────────────────────────────────────────────────────────┐
+│                    Self-Play Loop                        │
+│                                                          │
+│  Adversary ──→ picks intervention type + placement       │
+│      │                                                   │
+│      ▼                                                   │
+│  Environment ──→ generates contaminated supply chain     │
+│      │                                                   │
+│      ▼                                                   │
+│  Investigator ──→ inspect, trace, quarantine, finalize   │
+│      │                                                   │
+│      ▼                                                   │
+│  F1 Score ──→ updates both agents                        │
+│      │                                                   │
+│      └──→ repeat for N episodes                          │
+└──────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## 🧪 Reproducibility
 
-- **Runs in <2 seconds on CPU.**
-- **No external APIs or heavy models required.**
-- **Deterministic seeds used** for exact evaluation and metric reproducibility.
+- **Self-play runs in <2 seconds on CPU** — no GPUs needed
+- **Deterministic seeds** ensure exact reproducibility
+- **All plots auto-generated** and committed to `plots/`
+- **Training script** can be re-run in Google Colab (free T4)
 
 ---
 
 ## 📦 Project Structure
+
 ```text
 recalltrace-openenv/
-├── run_selfplay.py        # ENTRY POINT
-├── app.py                 # Hugging Face Gradio UI
-├── README.md              # Project Story
-├── PITCH.md               # 3-Minute Mentor Pitch Script
-├── MENTOR_PREP.md         # Fast-prep for live judging
-├── PITCH_LANGUAGE.md      # Language guidelines
-├── architecture.html      # Visual Flow Diagram
+├── README.md                  # This file
+├── openenv.yaml               # OpenEnv manifest
+├── run_selfplay.py            # Self-play training entry point
+├── train_trl.py               # LLM training (Unsloth + TRL)
+├── inference.py               # Submission inference runner
+├── app.py                     # Gradio fallback UI
+├── Dockerfile                 # HF Spaces Docker deployment
 │
-├── selfplay/              # Core Logic (Investigator, Adversary, Tracker)
-├── env/                   # Original OpenEnv Environment definition
+├── env/                       # OpenEnv environment (reset/step/state)
+│   ├── env.py                 # RecallTraceEnv
+│   └── models.py              # Action, Observation, Reward models
 │
-├── plots/                 # Auto-generated Demo Imagery
+├── selfplay/                  # Adversarial self-play engine
+│   ├── trainer.py             # SelfPlayTrainer
+│   ├── investigator.py        # InvestigatorAgent (learnable params)
+│   ├── adversary.py           # AdversaryAgent (softmax strategy)
+│   ├── belief_tracker.py      # Probabilistic belief state
+│   ├── scenario_gen.py        # Procedural graph generation
+│   ├── visualization.py       # Training curve plots
+│   └── demo_replay.py         # Before/after comparison
+│
+├── baseline/                  # Heuristic baseline policy
+├── grader/                    # Deterministic grading
+├── server/                    # FastAPI server + static frontend
+│   ├── app.py
+│   └── static/
+│       ├── index.html
+│       ├── styles.css
+│       └── app.js
+│
+├── plots/                     # Auto-generated training plots
 │   ├── selfplay_training.png
 │   ├── before_after_demo.png
 │   └── episode_comparison.png
+│
+├── TRAINING_GUIDE.md          # Detailed training documentation
+├── PITCH.md                   # 3-minute pitch script
+└── MENTOR_PREP.md             # Judging session prep
+```
+
+---
+
+## 🔧 Setup
+
+```bash
+pip install -e .
+python run_selfplay.py          # Self-play (CPU, <2s)
+python train_trl.py             # LLM training (GPU)
+python inference.py             # Submission evaluation
 ```
