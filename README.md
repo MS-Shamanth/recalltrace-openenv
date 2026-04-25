@@ -8,28 +8,20 @@ app_file: app.py
 pinned: false
 ---
 
-## 🚀 Quick Start
+## 🚀 Quick Start (Run in one command)
 
 ```bash
 pip install -r requirements.txt
 python run_selfplay.py
 ```
+*(No API keys, no GPUs, runs in <2 seconds on CPU)*
+---
 
 # RecallTrace: Causal Inference via Adversarial Self-Play
 
 An RL agent that doesn't just learn to detect contamination — it learns to infer the hidden causal intervention behind it. 
 
 Trained via adversarial self-play, where an adversary learns to hide better as the investigator learns to reason better.
-
----
-
-## 🚀 Run in one command
-
-```bash
-python run_selfplay.py
-```
-
-*(No API keys, no GPUs, runs in <2 seconds on CPU)*
 
 ---
 
