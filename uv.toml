@@ -1,0 +1,3 @@
+no-cache = true
+python-preference = "only-system"
+python-downloads = "never"
