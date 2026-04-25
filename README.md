@@ -3,227 +3,93 @@ title: RecallTrace OpenEnv
 emoji: 🚨
 colorFrom: red
 colorTo: blue
-sdk: docker
-app_port: 7860
+sdk: gradio
+app_file: app.py
 pinned: false
 ---
 
-# RecallTrace OpenEnv
+# RecallTrace: Causal Inference via Adversarial Self-Play
 
-RecallTrace is a submission-grade OpenEnv environment for **product recall traceability and precision containment**. It models a real workflow that quality, operations, and supply-chain teams actually perform during a food or pharmaceutical recall:
+An RL agent that doesn't just learn to detect contamination — it learns to infer the hidden causal intervention behind it. 
 
-- map the affected batch across a distribution network,
-- follow repacked or relabeled inventory back to the source lot,
-- inspect local evidence at each node,
-- quarantine exactly the unsafe quantity,
-- notify the right downstream stakeholders,
-- close the incident with minimal business disruption.
+Trained via adversarial self-play, where an adversary learns to hide better as the investigator learns to reason better.
 
-This is not a toy. The hard task models a realistic and expensive failure mode: contaminated stock gets mixed with safe stock during cross-docking, so the agent must contain only the unsafe portion instead of blanket-blocking everything.
+---
 
-## Why This Environment Matters
+## 🚀 Run in one command
 
-Recall-response benchmarks are rare, but they are a strong fit for agent evaluation because they combine:
+```bash
+python run_selfplay.py
+```
 
-- graph reasoning,
-- partial observability,
-- evidence gathering,
-- precision actions under cost pressure,
-- deterministic grading.
+*(No API keys, no GPUs, runs in <2 seconds on CPU)*
 
-That makes RecallTrace useful both for RL-style environments and for benchmarking frontier LLM agents on operational decision-making.
+---
 
-## Tasks
+## 🎥 What you'll see
 
-### 1. `phase1_direct_recall` - Easy
+- Agent improves from random (spray-and-pray) to precise, belief-calibrated quarantine.
+- F1 score increases to ~1.0 over 200 episodes.
+- Nodes quarantined drops from 8.3/episode to 3.1/episode.
+- Adversary adapts to agent weaknesses dynamically.
 
-- One contaminated lot (`LotA`)
-- Straightforward warehouse -> store distribution
-- Goal: find every holder of the original lot and quarantine all unsafe units
+---
 
-### 2. `phase2_relabel_recall` - Medium
+## 📊 Proof of Learning
 
-- The original contaminated lot is repacked and relabeled (`LotA_R1`, `LotA_R2`)
-- Goal: trace the lineage from the source lot to all derived labels and quarantine every affected label precisely
+### 1. The Learning Curves
+*(Generated automatically when you run the script)*
 
-### 3. `phase3_mixed_shipments` - Hard
+![Training Curves](plots/selfplay_training.png)
 
-- Contaminated inventory is mixed with safe stock into `LotBlend`
-- Inspection reveals only part of the lot is unsafe at each node
-- Goal: quarantine the unsafe quantity only, avoid over-blocking safe stock, and still notify all affected nodes
+### 2. Before vs After Behavior
+*(Untrained vs Trained Agent Comparison)*
 
-## Action Space
+![Before vs After](plots/before_after_demo.png)
 
-| Action | Parameters | Meaning |
-| --- | --- | --- |
-| `inspect_node` | `node_id` | Inspect a warehouse/store/cross-dock node and reveal local evidence |
-| `trace_lot` | `lot_id` | Trace the root lot across relabels and downstream movement |
-| `quarantine` | `node_id`, `lot_id`, `quantity` | Move inventory from active stock to quarantine |
-| `notify` | `node_id` or `all` | Send recall notifications to one or all nodes |
-| `finalize` | none | End the episode and compute the deterministic score |
+---
 
-## Observation Space
+## 🧠 Why This Is Unique
 
-Each `reset()` and `step()` returns a typed `RecallObservation` model with:
+1. **Causal Inference (not Graph Traversal)**: 30-50% of the graph edges are hidden. The agent must perform abductive reasoning to identify *which* hidden causal intervention (relabeling, mixing, record deletion) produced the observed contamination pattern.
+2. **Partial Observability**: The agent relies on a probabilistic belief state (`P(contaminated)` per node) and tool calls to reduce entropy.
+3. **Adversarial Self-Play (Theme 4)**: The environment's difficulty is not static. An adversary agent chooses where to place interventions, adapting its curriculum based on the investigator's failure modes.
+4. **Belief-Based Decisions (Theme 3.1)**: Quarantines are only rewarded if the agent is confident (`P > 0.8`). Uncalibrated guesses are heavily penalized.
 
-- `task_id`
-- `phase`
-- `recall_notice`
-- `available_actions`
-- `inventory`
-- `discovered_shipments`
-- `inspected_nodes`
-- `inspection_results`
-- `trace_results`
-- `notified_nodes`
-- `quarantined_inventory`
-- `history`
-- `steps_taken`
-- `remaining_step_budget`
+---
 
-## Reward Design
+## ⚙️ How It Works
 
-Trajectory rewards are shaped so the agent gets useful signal throughout the episode:
+- **The Environment**: A procedural generator builds a unique contamination propagation graph every episode with decoys, false positives, and hidden interventions.
+- **The Investigator (Agent 1)**: Inspects nodes, traces lineages, and cross-references data to find contamination and quarantine it. Rewarded for precision and recall (+2.0 for correct, -1.5 for incorrect).
+- **The Adversary (Agent 2)**: Chooses intervention types and placements. Rewarded exclusively when the Investigator fails.
 
-- positive reward for tracing the correct recall lineage,
-- positive reward for inspecting nodes and gathering evidence,
-- strong positive reward for exact quarantine,
-- smaller positive reward for notifying affected stakeholders,
-- negative reward for repeated low-value actions,
-- negative reward for quarantining safe stock,
-- timeout penalty if the agent exhausts the step budget.
+---
 
-Final episode score is deterministic in `[0.0, 1.0]` and combines:
+## 🧪 Reproducibility
 
-- quarantine precision,
-- notification coverage,
-- investigation coverage,
-- efficiency.
+- **Runs in <2 seconds on CPU.**
+- **No external APIs or heavy models required.**
+- **Deterministic seeds used** for exact evaluation and metric reproducibility.
 
-## Project Structure
+---
 
+## 📦 Project Structure
 ```text
 recalltrace-openenv/
-|-- env/
-|   |-- env.py
-|   |-- models.py
-|   `-- __init__.py
-|-- grader/
-|   `-- grader.py
-|-- inference/
-|   |-- inference.py
-|   `-- policy.py
-|-- scenario/
-|   `-- scenario.py
-|-- tests/
-|   `-- test_env.py
-|-- config/
-|   `-- openenv.yaml
-|-- Dockerfile
-|-- inference.py
-|-- openenv.yaml
-|-- requirements.txt
-|-- server.py
-`-- README.md
+├── run_selfplay.py        # ENTRY POINT
+├── app.py                 # Hugging Face Gradio UI
+├── README.md              # Project Story
+├── PITCH.md               # 3-Minute Mentor Pitch Script
+├── MENTOR_PREP.md         # Fast-prep for live judging
+├── PITCH_LANGUAGE.md      # Language guidelines
+├── architecture.html      # Visual Flow Diagram
+│
+├── selfplay/              # Core Logic (Investigator, Adversary, Tracker)
+├── env/                   # Original OpenEnv Environment definition
+│
+├── plots/                 # Auto-generated Demo Imagery
+│   ├── selfplay_training.png
+│   ├── before_after_demo.png
+│   └── episode_comparison.png
 ```
-
-## Setup
-
-### Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### Run the API server locally
-
-```bash
-uvicorn server:app --host 0.0.0.0 --port 7860
-```
-
-### Run the baseline inference script
-
-```bash
-python inference.py
-```
-
-### Run unit tests
-
-```bash
-python -m unittest discover -s tests -v
-```
-
-## OpenEnv Interface
-
-The environment implements:
-
-- typed Pydantic `RecallAction`, `RecallObservation`, and `RewardSignal` models,
-- `reset()` -> initial typed observation,
-- `step(action)` -> `(observation, reward, done, info)`,
-- `state()` -> full typed internal snapshot,
-- `openenv.yaml` metadata,
-- HTTP endpoints at `/reset`, `/step`, `/state`, `/tasks`, `/health`.
-
-## Baseline Inference
-
-The root `inference.py` file is the submission entrypoint.
-
-It:
-
-- uses the OpenAI client when `OPENAI_API_KEY` or `HF_TOKEN` is configured,
-- falls back to a deterministic heuristic policy when no model credentials are present,
-- emits structured stdout logs in `[START]`, `[STEP]`, `[END]` format,
-- evaluates all 3 tasks,
-- reports reproducible scores.
-
-Environment variables:
-
-- `API_BASE_URL` - API endpoint for model inference
-- `MODEL_NAME` - model identifier
-- `OPENAI_API_KEY` or `HF_TOKEN` - credential for the OpenAI-compatible endpoint
-
-## Baseline Scores
-
-Current deterministic heuristic baseline:
-
-- `phase1_direct_recall`: ~0.9700
-- `phase2_relabel_recall`: ~0.9643
-- `phase3_mixed_shipments`: ~0.9688
-- average: ~0.9677
-
-These scores are reproducible because the environment is deterministic and the fallback heuristic is deterministic.
-
-## Docker
-
-Build and run locally:
-
-```bash
-docker build -t recalltrace .
-docker run -p 7860:7860 recalltrace
-```
-
-## Hugging Face Spaces
-
-This repo is container-ready for a Docker-based HF Space.
-
-Recommended launch command is already encoded in the root `Dockerfile`:
-
-```text
-uvicorn server:app --host 0.0.0.0 --port 7860
-```
-
-## Deterministic Grading
-
-Programmatic graders live in `grader/grader.py` and can:
-
-- replay a full action plan against any task,
-- compute a deterministic `TaskGrade`,
-- validate that final scores remain within `[0.0, 1.0]`.
-
-## What Makes It Novel
-
-- uncommon real-world domain for OpenEnv,
-- graph tracing plus evidence collection,
-- relabel lineage reasoning,
-- mixed-lot precision containment,
-- explicit tradeoff between safety and operational disruption.
