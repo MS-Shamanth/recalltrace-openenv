@@ -8,6 +8,12 @@ app_file: app.py
 pinned: false
 ---
 
+## 🚀 Quick Start
+
+```bash
+pip install -r requirements.txt
+python run_selfplay.py
+
 # RecallTrace: Causal Inference via Adversarial Self-Play
 
 An RL agent that doesn't just learn to detect contamination — it learns to infer the hidden causal intervention behind it. 
