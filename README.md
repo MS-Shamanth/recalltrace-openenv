@@ -141,3 +141,12 @@ recalltrace-openenv/
 ├── Dockerfile
 ├── requirements.txt
 ├── README.md
+```
+
+## 🧠 What the agent learns
+
+- Early: quarantines 6–8 nodes randomly (F1 ~0.3)
+- Mid: starts identifying patterns (F1 ~0.6)
+- Late: infers intervention type before acting (F1 ~0.8)
+
+The agent does not memorize — it infers hidden causal events under partial observability.
