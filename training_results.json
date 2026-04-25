@@ -1,0 +1,34 @@
+{
+  "training": {
+    "n_episodes": 30,
+    "difficulty": 3,
+    "final_f1": 0.8571,
+    "final_calibration": 0.9172,
+    "final_reward": 0.8752,
+    "avg_f1": 0.9586,
+    "avg_calibration": 0.9628,
+    "avg_reward": 0.9599,
+    "improvement_f1": -0.1429
+  },
+  "curriculum": {
+    "n_episodes": 50,
+    "final_reward": 0.9461,
+    "avg_reward": 0.9311
+  },
+  "baselines": {
+    "random": {
+      "mean": 0.3521,
+      "std": 0.1635
+    },
+    "heuristic": {
+      "mean": 0.946,
+      "std": 0.0594
+    }
+  },
+  "plots": [
+    "plots\\training_curves.png",
+    "plots\\before_after.png",
+    "plots\\curriculum_learning.png",
+    "plots\\baseline_comparison.png"
+  ]
+}
