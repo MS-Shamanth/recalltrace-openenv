@@ -201,6 +201,13 @@ def train_sft(dataset_dicts: list[dict], num_epochs: int = 3, max_steps: int = -
     dataset = Dataset.from_list(formatted_data)
     print(f"  Dataset size: {len(dataset)} samples")
 
+    # Unsloth requires formatting_func — handle both single example and batch
+    def formatting_func(example):
+        t = example["text"]
+        if isinstance(t, list):
+            return t
+        return [t]
+
     # Training config
     training_args = SFTConfig(
         output_dir=str(OUTPUT_DIR),
@@ -225,6 +232,7 @@ def train_sft(dataset_dicts: list[dict], num_epochs: int = 3, max_steps: int = -
         model=model,
         tokenizer=tokenizer,
         train_dataset=dataset,
+        formatting_func=formatting_func,
         args=training_args,
     )
 
