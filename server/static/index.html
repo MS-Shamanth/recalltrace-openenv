@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=10">
+  <link rel="stylesheet" href="/static/styles.css?v=11">
 </head>
 <body>
   <!-- Particle canvas background -->
@@ -62,6 +62,9 @@
     <nav class="tab-nav" id="tab-nav">
       <button class="tab-btn active" data-tab="simulation" onclick="switchTab('simulation')">
         <span class="tab-icon">🧠</span> Simulation
+      </button>
+      <button class="tab-btn" data-tab="llmagent" onclick="switchTab('llmagent')">
+        <span class="tab-icon">🤖</span> LLM Agent
       </button>
       <button class="tab-btn" data-tab="training" onclick="switchTab('training')">
         <span class="tab-icon">📈</span> Training Curves
@@ -225,6 +228,72 @@
             <div class="comparison-f1" id="comp-late-f1">F1 = 0.95</div>
             <div class="comparison-stats" id="comp-late-stats"></div>
           </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== LLM AGENT TAB ===== -->
+    <section class="tab-content" id="tab-llmagent">
+      <div class="llm-hero">
+        <div class="panel glass-panel">
+          <div class="panel-header">
+            <h2>🤖 Live LLM Agent Demo</h2>
+            <div class="panel-badge" id="llm-status-badge">Checking GPU...</div>
+          </div>
+          <p class="llm-desc">
+            Watch the <strong>fine-tuned Qwen2.5-0.5B</strong> model investigate a supply-chain 
+            contamination in real-time. The model was trained via SFT on 3,500 expert demonstrations 
+            using <a href="https://github.com/unslothai/unsloth" target="_blank">Unsloth</a> + TRL.
+          </p>
+          <div class="llm-controls">
+            <select id="llm-task-select" class="llm-select">
+              <option value="">🎲 Random Task</option>
+            </select>
+            <button class="btn btn-primary btn-glow" id="btn-llm-run" onclick="runLLMEpisode()">
+              <span class="btn-icon">▶</span> Run LLM Agent
+            </button>
+          </div>
+          <div class="progress-container hidden" id="llm-progress">
+            <div class="progress-bar"><div class="progress-fill" id="llm-progress-fill"></div></div>
+            <span class="progress-text" id="llm-progress-text">Loading model...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div class="llm-results hidden" id="llm-results">
+        <!-- Score Cards -->
+        <div class="panel glass-panel">
+          <div class="panel-header">
+            <h2>Episode Result</h2>
+          </div>
+          <div class="score-grid">
+            <div class="score-card">
+              <span>Final Score</span>
+              <strong id="llm-score" style="color:#2ea043">—</strong>
+            </div>
+            <div class="score-card">
+              <span>Total Reward</span>
+              <strong id="llm-reward">—</strong>
+            </div>
+            <div class="score-card">
+              <span>Steps Taken</span>
+              <strong id="llm-steps">—</strong>
+            </div>
+            <div class="score-card">
+              <span>Task</span>
+              <strong id="llm-task-name" style="font-size:0.85em">—</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step-by-Step Log -->
+        <div class="panel glass-panel">
+          <div class="panel-header">
+            <h2>Step-by-Step Agent Actions</h2>
+            <p class="panel-subtitle">Each step shows the model's raw JSON output and the action taken</p>
+          </div>
+          <div id="llm-episode-log" class="oe-log-area"></div>
         </div>
       </div>
     </section>
@@ -426,6 +495,6 @@
     </footer>
   </div>
 
-  <script src="/static/app.js?v=10"></script>
+  <script src="/static/app.js?v=11"></script>
 </body>
 </html>

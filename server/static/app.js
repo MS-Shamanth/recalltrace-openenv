@@ -491,7 +491,137 @@ function renderOELog(data) {
 }
 
 // ---------------------------------------------------------------------------
+// LLM Agent Demo
+// ---------------------------------------------------------------------------
+
+async function checkLLMStatus() {
+  const badge = document.getElementById('llm-status-badge');
+  try {
+    const res = await fetch('/api/llm/status');
+    const data = await res.json();
+    if (data.gpu_available) {
+      badge.textContent = data.model_loaded ? '✅ Model Ready' : `✅ GPU: ${data.gpu_name}`;
+      badge.style.background = 'rgba(46,160,67,0.2)';
+      badge.style.color = '#2ea043';
+    } else {
+      badge.textContent = '⚠ CPU Only';
+      badge.style.background = 'rgba(210,153,34,0.2)';
+      badge.style.color = '#d29922';
+    }
+  } catch(e) {
+    badge.textContent = '❌ Offline';
+    badge.style.background = 'rgba(218,54,51,0.2)';
+    badge.style.color = '#da3633';
+  }
+}
+
+async function populateLLMTasks() {
+  try {
+    const res = await fetch('/api/tasks');
+    const data = await res.json();
+    const select = document.getElementById('llm-task-select');
+    if (select && data.tasks) {
+      data.tasks.forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t.task_id;
+        opt.textContent = `${t.difficulty.toUpperCase()} — ${t.name}`;
+        select.appendChild(opt);
+      });
+    }
+  } catch(e) { console.warn('LLM tasks fetch failed', e); }
+}
+
+async function runLLMEpisode() {
+  const btn = document.getElementById('btn-llm-run');
+  const prog = document.getElementById('llm-progress');
+  const fill = document.getElementById('llm-progress-fill');
+  const pText = document.getElementById('llm-progress-text');
+  const results = document.getElementById('llm-results');
+
+  btn.disabled = true;
+  prog.classList.remove('hidden');
+  results.classList.add('hidden');
+  fill.style.width = '15%';
+  pText.textContent = 'Loading model (first run may take ~30s)...';
+
+  const taskId = document.getElementById('llm-task-select').value;
+  const body = taskId ? {task_id: taskId} : {};
+
+  try {
+    fill.style.width = '40%';
+    pText.textContent = 'Running LLM agent on task...';
+
+    const res = await fetch('/api/llm/run_episode', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+
+    fill.style.width = '90%';
+    pText.textContent = 'Rendering results...';
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Server error');
+    }
+
+    const data = await res.json();
+    fill.style.width = '100%';
+    pText.textContent = 'Done!';
+
+    // Populate score cards
+    document.getElementById('llm-score').textContent = data.score.toFixed(4);
+    document.getElementById('llm-score').style.color = data.score >= 0.9 ? '#2ea043' : data.score >= 0.5 ? '#f0c040' : '#da3633';
+    document.getElementById('llm-reward').textContent = data.total_reward.toFixed(4);
+    document.getElementById('llm-steps').textContent = data.steps_taken;
+    document.getElementById('llm-task-name').textContent = data.task?.name || '—';
+
+    // Render step log
+    const logEl = document.getElementById('llm-episode-log');
+    logEl.innerHTML = data.steps.map(s => {
+      const actionType = (s.action.type || '').replace(/_/g, ' ');
+      const bits = [];
+      if (s.action.node_id) bits.push('Node: ' + s.action.node_id);
+      if (s.action.lot_id) bits.push('Lot: ' + s.action.lot_id);
+      if (s.action.quantity) bits.push('Qty: ' + s.action.quantity);
+      const fallbackTag = s.used_fallback
+        ? '<span class="action-chip" style="background:rgba(210,153,34,0.2);color:#d29922">fallback</span>'
+        : '<span class="action-chip" style="background:rgba(46,160,67,0.2);color:#2ea043">model</span>';
+      const rewardColor = s.reward >= 0 ? '#2ea043' : '#da3633';
+
+      return `<div class="log-step">
+        <div class="log-title">
+          <strong>Step ${s.step}</strong>
+          <span class="action-chip">${actionType}</span>
+          ${fallbackTag}
+        </div>
+        <div class="action-meta">
+          <div>${bits.join(' | ') || '—'}</div>
+          <div style="color:${rewardColor}">Reward: ${s.reward >= 0 ? '+' : ''}${s.reward.toFixed(4)}</div>
+        </div>
+        <div class="model-output-box">
+          <span class="model-output-label">Model Output:</span>
+          <code>${s.model_output.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</code>
+        </div>
+      </div>`;
+    }).join('');
+
+    results.classList.remove('hidden');
+    checkLLMStatus();
+
+    setTimeout(() => { prog.classList.add('hidden'); btn.disabled = false; }, 1200);
+  } catch(e) {
+    fill.style.width = '100%';
+    fill.style.background = '#da3633';
+    pText.textContent = 'Error: ' + e.message;
+    btn.disabled = false;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
 fetchTasks();
 loadGraph();
+checkLLMStatus();
+populateLLMTasks();

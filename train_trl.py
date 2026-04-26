@@ -327,6 +327,9 @@ def evaluate_trained(model, tokenizer, num_episodes: int = 50) -> dict:
 
     scores = []
     for ep in range(num_episodes):
+        if (ep + 1) % 5 == 0 or ep == 0:
+            print(f"    Evaluating episode {ep+1}/{num_episodes}...")
+        
         tasks = RecallTraceEnv.available_tasks()
         task = tasks[ep % len(tasks)]
         env = RecallTraceEnv(task_id=task.task_id)
@@ -343,7 +346,7 @@ def evaluate_trained(model, tokenizer, num_episodes: int = 50) -> dict:
 
             with __import__("torch").no_grad():
                 outputs = model.generate(
-                    **inputs, max_new_tokens=200, temperature=0.1,
+                    **inputs, max_new_tokens=200, max_length=None, temperature=0.1,
                     do_sample=True, pad_token_id=tokenizer.eos_token_id,
                 )
             response = tokenizer.decode(outputs[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True).strip()
