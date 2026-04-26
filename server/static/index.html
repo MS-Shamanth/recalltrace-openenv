@@ -84,14 +84,14 @@
 
     <!-- ===== TAB NAV ===== -->
     <nav class="tab-nav" id="tab-nav">
-      <button class="tab-btn active" data-tab="simulation" onclick="switchTab('simulation')">
+      <button class="tab-btn active" data-tab="training" onclick="switchTab('training')">
+        <span class="tab-icon">📈</span> Gradio Dashboard
+      </button>
+      <button class="tab-btn" data-tab="simulation" onclick="switchTab('simulation')">
         <span class="tab-icon">🧠</span> Adversarial Engine
       </button>
       <button class="tab-btn" data-tab="llmagent" onclick="switchTab('llmagent')">
         <span class="tab-icon">🤖</span> LLM Agent
-      </button>
-      <button class="tab-btn" data-tab="training" onclick="switchTab('training')">
-        <span class="tab-icon">📈</span> Training Curves
       </button>
       <button class="tab-btn" data-tab="openenv" onclick="switchTab('openenv')">
         <span class="tab-icon">⚡</span> OpenEnv Runner
@@ -102,7 +102,7 @@
     </nav>
 
     <!-- ===== ADVERSARIAL ENGINE TAB ===== -->
-    <section class="tab-content active" id="tab-simulation">
+    <section class="tab-content" id="tab-simulation">
       <div class="sim-grid">
         <!-- Left: Graph Visualization -->
         <div class="panel glass-panel">
@@ -328,8 +328,8 @@
       </div>
     </section>
 
-    <!-- ===== TRAINING CURVES TAB (GRADIO STYLE) ===== -->
-    <section class="tab-content" id="tab-training">
+    <!-- ===== GRADIO DASHBOARD TAB ===== -->
+    <section class="tab-content active" id="tab-training">
       
       <!-- Inner Tabs -->
       <nav class="inner-tab-nav" id="gradio-tab-nav">
@@ -536,35 +536,21 @@ Training: REINFORCE + learned baseline + entropy regularization
     <!-- ===== ABOUT TAB ===== -->
     <section class="tab-content" id="tab-about">
       <div class="about-grid">
-        <div class="panel glass-panel">
+        <div class="panel glass-panel panel-wide">
           <div class="panel-header">
-            <h2>How It Works</h2>
+            <h2>RecallTrace Architecture & Environment Flow</h2>
           </div>
-          <div class="about-cards">
-            <div class="about-card">
-              <div class="about-icon">🔍</div>
-              <h3>The Investigator</h3>
-              <p>Inspects nodes, traces lineages, and cross-references data to find contamination. Rewarded +2.0 for
-                correct quarantines, penalized -1.5 for false positives.</p>
-            </div>
-            <div class="about-card">
-              <div class="about-icon">🎭</div>
-              <h3>The Adversary</h3>
-              <p>Chooses intervention types (relabeling, mixing, deletion) and placements to maximize Investigator
-                failure. Learns which strategies cause the most confusion.</p>
-            </div>
-            <div class="about-card">
-              <div class="about-icon">🧠</div>
-              <h3>Causal Inference</h3>
-              <p>30-50% of graph edges are hidden. The agent must perform abductive reasoning to identify which hidden
-                intervention produced the contamination pattern.</p>
-            </div>
-            <div class="about-card">
-              <div class="about-icon">⚔️</div>
-              <h3>Self-Play</h3>
-              <p>The environment's difficulty is not static. The adversary adapts its curriculum based on the
-                investigator's failure modes — creating an ever-harder challenge.</p>
-            </div>
+          <div style="padding: 20px; color: #c9d1d9; font-size: 1rem; line-height: 1.6;">
+            <p style="margin-bottom: 20px;">The RecallTrace Hugging Face Space operates as a Python-based Gradio application hosting an OpenEnv-compliant causal inference benchmark. At its core, the system runs a two-agent adversarial self-play loop. In this environment, an <strong>Investigator</strong> must identify and isolate a hidden contamination event within a procedurally generated, partially observable supply graph. An opposing <strong>Adversary</strong> intelligently places these interventions to maximize the Investigator's failure rate. The environment enforces an ungameable, composable reward function that computes a final score based on Recall (catching unsafe nodes), Precision (sparing safe nodes), Belief Calibration (making confident decisions), and Efficiency (using fewer steps).</p>
+
+            <h3 style="color: #f97316; margin-bottom: 12px; font-size: 1.2rem;">The Adaptive Heuristic Search</h3>
+            <p style="margin-bottom: 20px;">The Heuristic Investigator serves as an interpretable, fast-adapting baseline. Instead of neural networks, this agent uses dynamic, rule-based heuristics governed by learnable thresholds (e.g., quarantine confidence limits and "trust" in ambiguous lab results). After every episode, the agent calculates its F1 score (the harmonic mean of its precision and recall accuracy). If the F1 score dips, the agent adjusts its internal thresholds using an Exponential Moving Average (EMA). This allows the heuristic search to continuously tune its exploration and exploitation strategies dynamically, finding optimal paths through the causal graph with a very low computational footprint.</p>
+
+            <h3 style="color: #38bdf8; margin-bottom: 12px; font-size: 1.2rem;">The PyTorch RL Agent</h3>
+            <p style="margin-bottom: 20px;">The PyTorch RL Investigator is powered by a Deep Reinforcement Learning policy network. Because the environment's observation space is variable (graphs change size, inventory fluctuates), the architecture utilizes a <code>StateEncoder</code> to map the raw observation dictionaries into a fixed 112-dimensional feature tensor. This tensor is fed into a Multi-Layer Perceptron (MLP) equipped with three distinct output heads: an <strong>Action Head</strong> (to select one of the 7 tools), a <strong>Node Head</strong> (to target a specific node), and a <strong>Value Head</strong> (to predict the baseline reward). The model is trained using the <strong>REINFORCE</strong> algorithm. To ensure stable learning, the Value Head serves as a learned baseline to reduce variance, while an underlying entropy regularization coefficient forces the model to maintain exploration, preventing it from collapsing into trivial behaviors like quarantining every node immediately.</p>
+
+            <h3 style="color: #2ea043; margin-bottom: 12px; font-size: 1.2rem;">Adversarial Co-Evolution & Plot Generation</h3>
+            <p>As the Investigator learns, the learning environment dynamically shifts. The Adversary operates using an 18-cell dynamic score table cross-referencing three dimensions: Intervention Type, Graph Region, and Density Bucket. It uses a temperature-scaled Softmax distribution to sample attacks. If the Investigator expertly solves a specific scenario (scoring a high F1), the Adversary penalizes that specific cell in its table, forcing it to try novel attack patterns. Throughout this process, Python's Matplotlib continuously buffers the telemetry data. The <strong>RL F1 Curve</strong> plots the agent's expanding accuracy across episodes. The <strong>RL Training Curve</strong> tracks the underlying REINFORCE policy loss against the agent's reward. Finally, the <strong>Co-Evolution Curve</strong> maps the dual-agent progression, visually demonstrating the "arms race" where the Adversary's success metric dips precisely as the Investigator's capabilities improve.</p>
           </div>
         </div>
 
