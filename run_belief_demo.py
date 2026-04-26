@@ -1,6 +1,6 @@
 """Belief State Tracker — Live Demo
 
-Simulates 8 steps of an agent investigating a contaminated supply chain.
+Simulates 8 steps of an agent investigating a contamination propagation graph.
 Shows P(contaminated) rising for truly contaminated nodes while staying
 low for safe nodes.  At step 6, the agent quarantines when P > 0.85.
 
@@ -114,7 +114,7 @@ def run_demo(mode: str = "save") -> None:
     print()
     print("=" * 62)
     print("  RecallTrace -- Belief State Tracker Demo")
-    print("  Simulating 8 tool calls on a 6-node supply chain")
+    print("  Simulating 8 tool calls on a 6-node propagation graph")
     print("=" * 62)
 
     os.makedirs("plots/belief_frames", exist_ok=True)

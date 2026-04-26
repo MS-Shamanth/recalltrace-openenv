@@ -5,19 +5,23 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "recalltrace-openenv"
 version = "1.0.0"
-description = "Deterministic OpenEnv environment for supply-chain recall tracing and precision containment"
+description = "Causal inference benchmark — RL agent investigates hidden interventions in partially observable contamination propagation graphs via adversarial self-play"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
   "fastapi>=0.115.0,<1.0.0",
   "openai>=2.7.2,<3.0.0",
   "openenv-core>=0.2.0",
   "pydantic>=2.7.0,<3.0.0",
   "uvicorn>=0.30.0,<1.0.0",
+  "numpy",
+  "matplotlib",
+  "networkx",
+  "gradio",
 ]
 
 [project.scripts]
 server = "server.app:main"
 
 [tool.setuptools]
-packages = ["env", "grader", "scenario", "baseline", "server"]
+packages = ["env", "grader", "scenario", "baseline", "server", "selfplay"]

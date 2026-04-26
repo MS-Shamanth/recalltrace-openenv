@@ -11,6 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field
 class ActionType(str, Enum):
     INSPECT_NODE = "inspect_node"
     TRACE_LOT = "trace_lot"
+    CROSS_REFERENCE = "cross_reference"
+    REQUEST_LAB_TEST = "request_lab_test"
     QUARANTINE = "quarantine"
     NOTIFY = "notify"
     FINALIZE = "finalize"
@@ -24,6 +26,7 @@ class RecallAction(BaseModel):
     type: ActionType
     node_id: Optional[str] = None
     lot_id: Optional[str] = None
+    lot_id_2: Optional[str] = None  # second lot for cross_reference
     quantity: Optional[int] = Field(default=None, ge=1)
     rationale: Optional[str] = None
 
@@ -33,7 +36,7 @@ class RewardSignal(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    value: float = Field(ge=-1.0, le=1.0)
+    value: float = Field(ge=-5.0, le=5.0)
     reason: str
     components: Dict[str, float] = Field(default_factory=dict)
 
@@ -75,6 +78,8 @@ class RecallObservation(BaseModel):
     inspected_nodes: List[str]
     inspection_results: Dict[str, Dict[str, InspectionEvidence]]
     trace_results: Dict[str, Dict[str, Any]]
+    cross_reference_results: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    lab_test_results: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     notified_nodes: List[str]
     quarantined_inventory: Dict[str, Dict[str, int]]
     history: List[str]

@@ -1,500 +1,149 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RecallTrace — Causal Inference via Adversarial Self-Play</title>
-  <meta name="description" content="An RL agent that learns to infer hidden causal interventions in supply-chain contamination through adversarial self-play. Built for Meta PyTorch OpenEnv Hackathon.">
+  <title>RecallTrace OpenEnv</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=11">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css?v=4">
 </head>
 <body>
-  <!-- Particle canvas background -->
-  <canvas id="particles-canvas"></canvas>
-
   <div class="page-shell">
-    <!-- ===== HERO ===== -->
-    <header class="hero" id="hero">
-      <div class="hero-glow"></div>
-      <div class="hero-content">
-        <span class="eyebrow animate-in">Meta PyTorch OpenEnv Hackathon</span>
-        <h1 class="animate-in delay-1">
-          <span class="gradient-text">RecallTrace</span>
-        </h1>
-        <p class="hero-subtitle animate-in delay-2">Causal Inference via Adversarial Self-Play</p>
-        <p class="hero-desc animate-in delay-3">
-          An RL agent that doesn't just detect contamination — it infers the 
-          <strong>hidden causal intervention</strong> behind it. Trained via adversarial 
-          self-play where an adversary learns to hide better as the investigator reasons better.
+    <header class="hero">
+      <div class="hero-copy">
+        <span class="eyebrow">Safety-Critical OpenEnv Benchmark</span>
+        <h1>RecallTrace OpenEnv</h1>
+        <p class="hero-text">
+          A real-world supply-chain recall benchmark where agents must trace contaminated lots,
+          follow relabeled inventory lineage, inspect evidence, and quarantine only the unsafe stock.
         </p>
-        <div class="hero-stats animate-in delay-4">
-          <div class="stat-pill">
-            <span class="stat-value" id="stat-f1">0.95+</span>
-            <span class="stat-label">F1 Score</span>
-          </div>
-          <div class="stat-pill">
-            <span class="stat-value" id="stat-nodes">3.1</span>
-            <span class="stat-label">Nodes/Episode</span>
-          </div>
-          <div class="stat-pill">
-            <span class="stat-value" id="stat-time">&lt;2s</span>
-            <span class="stat-label">CPU Training</span>
-          </div>
-          <div class="stat-pill">
-            <span class="stat-value" id="stat-episodes">200</span>
-            <span class="stat-label">Episodes</span>
-          </div>
+        <div class="badge-row">
+          <span class="badge">OpenEnv compliant</span>
+          <span class="badge">Deterministic grading</span>
+          <span class="badge">3 escalating tasks</span>
+          <span class="badge">Precision containment</span>
         </div>
-        <div class="hero-actions animate-in delay-5">
-          <button class="btn btn-primary btn-glow" id="btn-run-simulation" onclick="switchTab('simulation')">
-            <span class="btn-icon">▶</span> Run Simulation
-          </button>
-          <button class="btn btn-outline" onclick="switchTab('openenv')">
-            <span class="btn-icon">⚡</span> OpenEnv Runner
-          </button>
+      </div>
+      <div class="hero-panel">
+        <div class="metric-card">
+          <span class="metric-label">Average baseline</span>
+          <strong id="metric-average">0.9677</strong>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Hard task focus</span>
+          <strong>Mixed safe/unsafe inventory</strong>
+        </div>
+        <div class="metric-card">
+          <span class="metric-label">Judging edge</span>
+          <strong>Operational realism over toy mechanics</strong>
         </div>
       </div>
     </header>
 
-    <!-- ===== TAB NAV ===== -->
-    <nav class="tab-nav" id="tab-nav">
-      <button class="tab-btn active" data-tab="simulation" onclick="switchTab('simulation')">
-        <span class="tab-icon">🧠</span> Simulation
-      </button>
-      <button class="tab-btn" data-tab="llmagent" onclick="switchTab('llmagent')">
-        <span class="tab-icon">🤖</span> LLM Agent
-      </button>
-      <button class="tab-btn" data-tab="training" onclick="switchTab('training')">
-        <span class="tab-icon">📈</span> Training Curves
-      </button>
-      <button class="tab-btn" data-tab="openenv" onclick="switchTab('openenv')">
-        <span class="tab-icon">⚡</span> OpenEnv Runner
-      </button>
-      <button class="tab-btn" data-tab="about" onclick="switchTab('about')">
-        <span class="tab-icon">📖</span> About
-      </button>
-    </nav>
-
-    <!-- ===== SIMULATION TAB ===== -->
-    <section class="tab-content active" id="tab-simulation">
-      <div class="sim-grid">
-        <!-- Left: Graph Visualization -->
-        <div class="panel glass-panel">
-          <div class="panel-header">
-            <h2>Supply-Chain Graph</h2>
-            <div class="panel-badge" id="sim-status-badge">Ready</div>
-          </div>
-          <div class="graph-container" id="graph-container">
-            <svg id="graph-svg" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid meet">
-              <defs>
-                <filter id="glow">
-                  <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
-                  <feMerge>
-                    <feMergeNode in="coloredBlur"/>
-                    <feMergeNode in="SourceGraphic"/>
-                  </feMerge>
-                </filter>
-                <filter id="glow-strong">
-                  <feGaussianBlur stdDeviation="6" result="coloredBlur"/>
-                  <feMerge>
-                    <feMergeNode in="coloredBlur"/>
-                    <feMergeNode in="SourceGraphic"/>
-                  </feMerge>
-                </filter>
-                <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                  <polygon points="0 0, 10 3.5, 0 7" fill="rgba(255,255,255,0.2)"/>
-                </marker>
-                <marker id="arrowhead-active" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                  <polygon points="0 0, 10 3.5, 0 7" fill="#58a6ff"/>
-                </marker>
-                <linearGradient id="contam-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" style="stop-color:#ff6b6b;stop-opacity:0.4"/>
-                  <stop offset="100%" style="stop-color:#da3633;stop-opacity:0.1"/>
-                </linearGradient>
-              </defs>
-              <g id="graph-edges"></g>
-              <g id="graph-nodes"></g>
-              <g id="graph-labels"></g>
-              <g id="graph-overlays"></g>
-            </svg>
-            <!-- Legend -->
-            <div class="graph-legend">
-              <div class="legend-item"><span class="legend-dot" style="background:#21262d;border:2px solid #444c56"></span> Unvisited</div>
-              <div class="legend-item"><span class="legend-dot" style="background:#2d2a1a;border:2px solid #f0c040"></span> Visited</div>
-              <div class="legend-item"><span class="legend-dot" style="background:#da3633;border:2px solid #ff6b6b"></span> Quarantined</div>
-              <div class="legend-item"><span class="legend-dot" style="background:#1a3a2a;border:2px solid #2ea043"></span> Safe</div>
-              <div class="legend-item"><span class="legend-ring"></span> Hidden contamination</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Right: Controls + Belief State -->
-        <div class="sim-right">
-          <!-- Controls -->
-          <div class="panel glass-panel">
-            <div class="panel-header">
-              <h2>Controls</h2>
-            </div>
-            <div class="control-group">
-              <div class="control-row">
-                <label class="control-label">Episodes</label>
-                <input type="range" id="episode-slider" min="50" max="500" value="200" step="50" class="range-input">
-                <span class="range-value" id="episode-value">200</span>
-              </div>
-              <div class="control-row">
-                <label class="control-label">Graph Nodes</label>
-                <input type="range" id="nodes-slider" min="6" max="20" value="10" step="2" class="range-input">
-                <span class="range-value" id="nodes-value">10</span>
-              </div>
-              <div class="btn-group">
-                <button class="btn btn-primary btn-glow" id="btn-train" onclick="runSelfPlay()">
-                  <span class="btn-icon">🚀</span> Train Self-Play
-                </button>
-                <button class="btn btn-secondary" id="btn-replay" onclick="runReplay()">
-                  <span class="btn-icon">🔄</span> Before/After
-                </button>
-              </div>
-            </div>
-            <!-- Progress -->
-            <div class="progress-container hidden" id="progress-container">
-              <div class="progress-bar">
-                <div class="progress-fill" id="progress-fill"></div>
-              </div>
-              <span class="progress-text" id="progress-text">Training...</span>
-            </div>
-          </div>
-
-          <!-- Belief State -->
-          <div class="panel glass-panel">
-            <div class="panel-header">
-              <h2>Belief State</h2>
-              <div class="panel-badge" id="belief-step">Step 0</div>
-            </div>
-            <div class="belief-bars" id="belief-bars">
-              <div class="belief-empty">Run simulation to see belief state</div>
-            </div>
-          </div>
-
-          <!-- Episode Stats -->
-          <div class="panel glass-panel">
-            <div class="panel-header">
-              <h2>Episode Stats</h2>
-            </div>
-            <div class="stats-grid" id="episode-stats">
-              <div class="mini-stat">
-                <span class="mini-stat-label">F1 Score</span>
-                <span class="mini-stat-value" id="ep-f1">—</span>
-              </div>
-              <div class="mini-stat">
-                <span class="mini-stat-label">Quarantined</span>
-                <span class="mini-stat-value" id="ep-quarantined">—</span>
-              </div>
-              <div class="mini-stat">
-                <span class="mini-stat-label">Steps</span>
-                <span class="mini-stat-value" id="ep-steps">—</span>
-              </div>
-              <div class="mini-stat">
-                <span class="mini-stat-label">Intervention</span>
-                <span class="mini-stat-value" id="ep-intervention">—</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Before / After Comparison -->
-      <div class="panel glass-panel comparison-panel hidden" id="comparison-panel">
+    <main class="dashboard-grid">
+      <section class="panel panel-accent">
         <div class="panel-header">
-          <h2>Before vs After Self-Play Training</h2>
-          <p class="panel-subtitle">Investigator behavior change: spray & pray → precision targeting</p>
+          <h2>Task Runner</h2>
+          <p>Choose a task and run the deterministic baseline to inspect the full trajectory.</p>
         </div>
-        <div class="comparison-grid">
-          <div class="comparison-card bad">
-            <div class="comparison-title">
-              <span class="comparison-dot red"></span>
-              Episode <span id="comp-early-ep">5</span> (Untrained)
-            </div>
-            <div class="comparison-f1" id="comp-early-f1">F1 = 0.28</div>
-            <div class="comparison-stats" id="comp-early-stats"></div>
-          </div>
-          <div class="comparison-arrow">→</div>
-          <div class="comparison-card good">
-            <div class="comparison-title">
-              <span class="comparison-dot green"></span>
-              Episode <span id="comp-late-ep">195</span> (Trained)
-            </div>
-            <div class="comparison-f1" id="comp-late-f1">F1 = 0.95</div>
-            <div class="comparison-stats" id="comp-late-stats"></div>
+        <div class="controls">
+          <label class="field">
+            <span>Task level</span>
+            <select id="task-select"></select>
+          </label>
+          <div class="button-row">
+            <button id="reset-button" class="button button-secondary">Reset Task</button>
+            <button id="run-button" class="button button-primary">Run Episode</button>
+            <button id="run-all-button" class="button button-ghost">Run All Tasks</button>
           </div>
         </div>
-      </div>
-    </section>
+        <div id="task-summary" class="task-summary"></div>
+      </section>
 
-    <!-- ===== LLM AGENT TAB ===== -->
-    <section class="tab-content" id="tab-llmagent">
-      <div class="llm-hero">
-        <div class="panel glass-panel">
-          <div class="panel-header">
-            <h2>🤖 Live LLM Agent Demo</h2>
-            <div class="panel-badge" id="llm-status-badge">Checking GPU...</div>
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Scoreboard</h2>
+          <p>Live summary of the current task and the multi-task baseline run.</p>
+        </div>
+        <div class="score-grid">
+          <div class="score-card">
+            <span>Current score</span>
+            <strong id="current-score">-</strong>
           </div>
-          <p class="llm-desc">
-            Watch the <strong>fine-tuned Qwen2.5-0.5B</strong> model investigate a supply-chain 
-            contamination in real-time. The model was trained via SFT on 3,500 expert demonstrations 
-            using <a href="https://github.com/unslothai/unsloth" target="_blank">Unsloth</a> + TRL.
-          </p>
-          <div class="llm-controls">
-            <select id="llm-task-select" class="llm-select">
-              <option value="">🎲 Random Task</option>
-            </select>
-            <button class="btn btn-primary btn-glow" id="btn-llm-run" onclick="runLLMEpisode()">
-              <span class="btn-icon">▶</span> Run LLM Agent
-            </button>
+          <div class="score-card">
+            <span>Steps taken</span>
+            <strong id="current-steps">-</strong>
           </div>
-          <div class="progress-container hidden" id="llm-progress">
-            <div class="progress-bar"><div class="progress-fill" id="llm-progress-fill"></div></div>
-            <span class="progress-text" id="llm-progress-text">Loading model...</span>
+          <div class="score-card">
+            <span>Status</span>
+            <strong id="current-status">Ready</strong>
+          </div>
+          <div class="score-card">
+            <span>Average over all tasks</span>
+            <strong id="all-score">-</strong>
           </div>
         </div>
-      </div>
+        <div id="all-results" class="all-results empty-state">Run all tasks to compare easy, medium, and hard performance.</div>
+      </section>
 
-      <!-- Results -->
-      <div class="llm-results hidden" id="llm-results">
-        <!-- Score Cards -->
-        <div class="panel glass-panel">
-          <div class="panel-header">
-            <h2>Episode Result</h2>
-          </div>
-          <div class="score-grid">
-            <div class="score-card">
-              <span>Final Score</span>
-              <strong id="llm-score" style="color:#2ea043">—</strong>
-            </div>
-            <div class="score-card">
-              <span>Total Reward</span>
-              <strong id="llm-reward">—</strong>
-            </div>
-            <div class="score-card">
-              <span>Steps Taken</span>
-              <strong id="llm-steps">—</strong>
-            </div>
-            <div class="score-card">
-              <span>Task</span>
-              <strong id="llm-task-name" style="font-size:0.85em">—</strong>
-            </div>
-          </div>
+      <section class="panel panel-wide">
+        <div class="panel-header">
+          <h2>Episode Output</h2>
+          <p>Visual baseline trajectory, readable action summaries, and final grading highlights.</p>
         </div>
+        <div class="episode-layout">
+          <div class="episode-visuals">
+            <div class="mini-panel">
+              <h3>Reward Curve</h3>
+              <div id="reward-chart" class="reward-chart empty-state">Run a task to render the reward trajectory.</div>
+            </div>
+            <div class="mini-panel">
+              <h3>Final Outcome</h3>
+              <div id="final-summary" class="final-summary empty-state">Readable scoring highlights will appear here.</div>
+            </div>
+          </div>
+          <div id="episode-log" class="episode-log empty-state">Run a task to populate the episode trajectory.</div>
+        </div>
+      </section>
 
-        <!-- Step-by-Step Log -->
-        <div class="panel glass-panel">
-          <div class="panel-header">
-            <h2>Step-by-Step Agent Actions</h2>
-            <p class="panel-subtitle">Each step shows the model's raw JSON output and the action taken</p>
-          </div>
-          <div id="llm-episode-log" class="oe-log-area"></div>
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Judge Lens</h2>
         </div>
-      </div>
-    </section>
+        <div class="highlight-stack">
+          <div class="highlight-card">
+            <span class="highlight-title">Real-world utility</span>
+            <p>Models a safety-critical recall workflow that QA, operations, and supply-chain teams actually perform.</p>
+          </div>
+          <div class="highlight-card">
+            <span class="highlight-title">Frontier challenge</span>
+            <p>The hard task forces precision containment of mixed safe and unsafe stock under partial observability.</p>
+          </div>
+          <div class="highlight-card">
+            <span class="highlight-title">Benchmark quality</span>
+            <p>Deterministic graders evaluate precision, coverage, investigation depth, and efficiency with reproducible scores.</p>
+          </div>
+        </div>
+      </section>
 
-    <!-- ===== TRAINING CURVES TAB ===== -->
-    <section class="tab-content" id="tab-training">
-      <div class="charts-grid">
-        <div class="panel glass-panel chart-panel">
-          <div class="panel-header">
-            <h2>Investigator F1 Score</h2>
-            <div class="panel-badge green" id="chart-f1-badge">—</div>
-          </div>
-          <div class="chart-area" id="chart-f1">
-            <div class="chart-empty">Run self-play training to generate curves</div>
-          </div>
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Project Hub</h2>
         </div>
-        <div class="panel glass-panel chart-panel">
-          <div class="panel-header">
-            <h2>Adversary Reward</h2>
-            <div class="panel-badge red" id="chart-adv-badge">—</div>
-          </div>
-          <div class="chart-area" id="chart-adv">
-            <div class="chart-empty">Run self-play training to generate curves</div>
-          </div>
+        <div class="link-list">
+          <a href="/health" target="_blank" rel="noreferrer">Health endpoint</a>
+          <a href="/reset" target="_blank" rel="noreferrer">Reset endpoint</a>
+          <a href="/tasks" target="_blank" rel="noreferrer">Task catalog JSON</a>
+          <a href="https://github.com/MS-Shamanth/recalltrace-openenv/tree/sham" target="_blank" rel="noreferrer">GitHub source</a>
+          <a href="https://huggingface.co/spaces/ms-shamanth/recalltrace-openenv/tree/main" target="_blank" rel="noreferrer">Space files</a>
+          <a href="https://www.docker.com/" target="_blank" rel="noreferrer">Docker runtime</a>
+          <a href="https://github.com/openenvai/openenv" target="_blank" rel="noreferrer">OpenEnv ecosystem</a>
         </div>
-        <div class="panel glass-panel chart-panel">
-          <div class="panel-header">
-            <h2>Nodes Quarantined</h2>
-            <div class="panel-badge" id="chart-q-badge">—</div>
-          </div>
-          <div class="chart-area" id="chart-quarantined">
-            <div class="chart-empty">Run self-play training to generate curves</div>
-          </div>
-        </div>
-        <div class="panel glass-panel chart-panel">
-          <div class="panel-header">
-            <h2>Steps to Finalize</h2>
-            <div class="panel-badge" id="chart-s-badge">—</div>
-          </div>
-          <div class="chart-area" id="chart-steps">
-            <div class="chart-empty">Run self-play training to generate curves</div>
-          </div>
-        </div>
-      </div>
-      <!-- Summary Card -->
-      <div class="panel glass-panel summary-panel hidden" id="training-summary">
-        <div class="panel-header"><h2>Training Summary</h2></div>
-        <div class="summary-row" id="training-summary-content"></div>
-      </div>
-    </section>
-
-    <!-- ===== OPENENV RUNNER TAB ===== -->
-    <section class="tab-content" id="tab-openenv">
-      <div class="openenv-grid">
-        <div class="panel glass-panel">
-          <div class="panel-header">
-            <h2>Task Runner</h2>
-            <p class="panel-subtitle">Run the deterministic baseline on OpenEnv tasks</p>
-          </div>
-          <div class="controls">
-            <label class="field">
-              <span>Task level</span>
-              <select id="task-select"></select>
-            </label>
-            <div class="btn-group">
-              <button id="reset-button" class="btn btn-secondary" onclick="resetTask()">Reset Task</button>
-              <button id="run-button" class="btn btn-primary" onclick="runOpenEnvEpisode()">Run Episode</button>
-              <button id="run-all-button" class="btn btn-outline" onclick="runAllTasks()">Run All Tasks</button>
-            </div>
-          </div>
-          <div id="task-summary" class="task-summary-box"></div>
-        </div>
-
-        <div class="panel glass-panel">
-          <div class="panel-header">
-            <h2>Scoreboard</h2>
-          </div>
-          <div class="score-grid">
-            <div class="score-card">
-              <span>Current score</span>
-              <strong id="current-score">—</strong>
-            </div>
-            <div class="score-card">
-              <span>Steps taken</span>
-              <strong id="current-steps">—</strong>
-            </div>
-            <div class="score-card">
-              <span>Status</span>
-              <strong id="current-status">Ready</strong>
-            </div>
-            <div class="score-card">
-              <span>Average (all tasks)</span>
-              <strong id="all-score">—</strong>
-            </div>
-          </div>
-          <div id="all-results" class="all-results-box">Run all tasks to compare performance.</div>
-        </div>
-
-        <div class="panel glass-panel panel-wide">
-          <div class="panel-header">
-            <h2>Episode Log</h2>
-          </div>
-          <div class="oe-layout">
-            <div class="oe-visuals">
-              <div class="mini-panel-box">
-                <h3>Reward Curve</h3>
-                <div id="oe-reward-chart" class="oe-chart-area">Run a task to see rewards.</div>
-              </div>
-              <div class="mini-panel-box">
-                <h3>Final Outcome</h3>
-                <div id="oe-final-summary" class="oe-summary-area">Scoring highlights appear here.</div>
-              </div>
-            </div>
-            <div id="oe-episode-log" class="oe-log-area">Run a task to populate the trajectory.</div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===== ABOUT TAB ===== -->
-    <section class="tab-content" id="tab-about">
-      <div class="about-grid">
-        <div class="panel glass-panel">
-          <div class="panel-header">
-            <h2>How It Works</h2>
-          </div>
-          <div class="about-cards">
-            <div class="about-card">
-              <div class="about-icon">🔍</div>
-              <h3>The Investigator</h3>
-              <p>Inspects nodes, traces lineages, and cross-references data to find contamination. Rewarded +2.0 for correct quarantines, penalized -1.5 for false positives.</p>
-            </div>
-            <div class="about-card">
-              <div class="about-icon">🎭</div>
-              <h3>The Adversary</h3>
-              <p>Chooses intervention types (relabeling, mixing, deletion) and placements to maximize Investigator failure. Learns which strategies cause the most confusion.</p>
-            </div>
-            <div class="about-card">
-              <div class="about-icon">🧠</div>
-              <h3>Causal Inference</h3>
-              <p>30-50% of graph edges are hidden. The agent must perform abductive reasoning to identify which hidden intervention produced the contamination pattern.</p>
-            </div>
-            <div class="about-card">
-              <div class="about-icon">⚔️</div>
-              <h3>Self-Play</h3>
-              <p>The environment's difficulty is not static. The adversary adapts its curriculum based on the investigator's failure modes — creating an ever-harder challenge.</p>
-            </div>
-          </div>
-        </div>
-
-        <div class="panel glass-panel">
-          <div class="panel-header">
-            <h2>Key Themes</h2>
-          </div>
-          <div class="theme-cards">
-            <div class="theme-card">
-              <span class="theme-tag orange">Theme 3.1</span>
-              <h3>World Modeling</h3>
-              <p>Belief state tracking with P(contaminated) per node. Agent maintains probabilistic world model and reasons under uncertainty.</p>
-            </div>
-            <div class="theme-card">
-              <span class="theme-tag teal">Theme 4</span>
-              <h3>Recursive Skill Amplification</h3>
-              <p>Adversarial self-play creates an automatic difficulty curriculum. Both agents improve simultaneously in a co-evolutionary loop.</p>
-            </div>
-          </div>
-        </div>
-
-        <div class="panel glass-panel">
-          <div class="panel-header">
-            <h2>Links</h2>
-          </div>
-          <div class="link-grid">
-            <a href="/health" target="_blank" class="link-card">
-              <span class="link-icon">💚</span>
-              <span>Health Check</span>
-            </a>
-            <a href="/tasks" target="_blank" class="link-card">
-              <span class="link-icon">📋</span>
-              <span>Task Catalog</span>
-            </a>
-            <a href="https://github.com/MS-Shamanth/recalltrace-openenv" target="_blank" class="link-card">
-              <span class="link-icon">🔗</span>
-              <span>GitHub</span>
-            </a>
-            <a href="https://github.com/openenvai/openenv" target="_blank" class="link-card">
-              <span class="link-icon">🌐</span>
-              <span>OpenEnv</span>
-            </a>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ===== FOOTER ===== -->
-    <footer class="footer">
-      <p>RecallTrace — Causal Inference via Adversarial Self-Play</p>
-      <p class="footer-sub">Meta PyTorch OpenEnv Hackathon · Built by Shamanth</p>
-    </footer>
+      </section>
+    </main>
   </div>
-
-  <script src="/static/app.js?v=11"></script>
+  <script src="/static/app.js?v=4"></script>
 </body>
 </html>

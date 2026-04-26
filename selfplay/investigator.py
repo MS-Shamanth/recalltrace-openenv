@@ -41,6 +41,10 @@ class InvestigatorAgent:
         self.quarantine_decisions: List[Dict[str, Any]] = []
         self.intervention_guess: Optional[str] = None
         self.total_episodes = 0
+        self.cross_ref_done: bool = False
+
+        # Belief calibration tracking
+        self.belief_at_quarantine: List[float] = []
 
         # Adaptation history
         self._f1_history: List[float] = []
@@ -51,6 +55,8 @@ class InvestigatorAgent:
         self.nodes_quarantined = []
         self.quarantine_decisions = []
         self.intervention_guess = None
+        self.cross_ref_done = False
+        self.belief_at_quarantine = []
         self.belief_confidence = max(0.1, min(0.95, 0.1 + self.total_episodes * 0.004))
 
     def act(self, observation: RecallObservation, rng: random.Random | None = None) -> RecallAction:
@@ -73,6 +79,18 @@ class InvestigatorAgent:
                 self.nodes_visited.append(node_id)
                 return RecallAction(type="inspect_node", node_id=node_id,
                                     rationale="Collect evidence.")
+
+        # Step 2.5: Cross-reference suspect lots if we haven't yet
+        # This is the causal reasoning step — learned behavior
+        if not self.cross_ref_done and self.total_episodes > 15:
+            suspect_lots = self._find_suspect_lots(observation)
+            if len(suspect_lots) >= 2:
+                lot_a, lot_b = suspect_lots[0], suspect_lots[1]
+                self.cross_ref_done = True
+                return RecallAction(
+                    type="cross_reference", lot_id=lot_a, lot_id_2=lot_b,
+                    rationale=f"Cross-reference {lot_a} and {lot_b} to check shared ancestry.",
+                )
 
         # Step 3: Exploration — inspect non-traced nodes (high early, low late)
         if rng.random() < min(self.exploration_rate, 0.95):
@@ -115,6 +133,9 @@ class InvestigatorAgent:
                     qty = available_qty
                 else:
                     continue
+
+                # Track belief at quarantine time for calibration
+                self.belief_at_quarantine.append(evidence_score)
 
                 self.nodes_quarantined.append(node_id)
                 self.quarantine_decisions.append({
@@ -217,6 +238,16 @@ class InvestigatorAgent:
             return 0.7
         return 0.05
 
+    def _find_suspect_lots(self, observation: RecallObservation) -> List[str]:
+        """Find lots worth cross-referencing — suspect or mixed status."""
+        suspect_lots = []
+        for node_id, findings in observation.inspection_results.items():
+            for lot_id, finding in findings.items():
+                status = finding.status if hasattr(finding, 'status') else str(finding.get("status", ""))
+                if status in ("suspect", "mixed", "records_missing"):
+                    suspect_lots.append(lot_id)
+        return suspect_lots[:4]  # limit to 4 to keep tool calls bounded
+
     def _update_intervention_guess(self, finding: Any) -> None:
         """Try to identify the intervention type from evidence patterns."""
         status = finding.status if hasattr(finding, 'status') else str(finding.get("status", ""))
@@ -239,6 +270,15 @@ class InvestigatorAgent:
         match = re.search(r"\bLot[A-Za-z0-9_]+\b", observation.recall_notice)
         return match.group(0) if match else "LotA"
 
+    def get_belief_calibration_score(self) -> float:
+        """Average belief confidence at quarantine time.
+
+        Returns 0.0 if no quarantine decisions were made.
+        """
+        if not self.belief_at_quarantine:
+            return 0.0
+        return sum(self.belief_at_quarantine) / len(self.belief_at_quarantine)
+
     def get_episode_summary(self) -> Dict[str, Any]:
         return {
             "nodes_visited": list(set(self.nodes_visited)),
@@ -249,5 +289,7 @@ class InvestigatorAgent:
             "mixed_trust": round(self.mixed_trust, 4),
             "exploration_rate": round(self.exploration_rate, 4),
             "belief_confidence": round(self.belief_confidence, 4),
+            "belief_calibration": round(self.get_belief_calibration_score(), 4),
             "intervention_guess": self.intervention_guess,
+            "cross_ref_used": self.cross_ref_done,
         }

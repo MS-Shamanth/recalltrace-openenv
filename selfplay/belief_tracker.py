@@ -83,7 +83,7 @@ class BeliefStateTracker:
     hidden arc. Updates incrementally after each agent tool call.
 
     Args:
-        nodes: List of node names in the supply-chain graph.
+        nodes: List of node names in the contamination propagation graph.
         hidden_arcs: List of (source, target) pairs for hidden edges.
         quarantine_threshold: P(contaminated) above which the trained
             agent should quarantine. Default 0.85.

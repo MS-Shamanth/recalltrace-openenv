@@ -1,23 +1,20 @@
-"""Adversarial self-play module for RecallTrace.
+"""RecallTrace adversarial self-play system.
 
-Two agents co-evolve in a shared environment:
-  - InvestigatorAgent: finds and quarantines contaminated nodes.
-  - AdversaryAgent: chooses where and how to hide contamination.
+Core components:
+  - AdversaryAgent: chooses intervention placement to maximize investigator failure
+  - InvestigatorAgent: learns to identify hidden interventions via tool calls
+  - SelfPlayTrainer: orchestrates co-evolutionary training loop
+  - BeliefStateTracker: tracks and visualizes P(contaminated) per node
 """
 
 from selfplay.adversary import AdversaryAgent
 from selfplay.investigator import InvestigatorAgent
 from selfplay.trainer import SelfPlayTrainer
-from selfplay.visualization import show_training_curves, show_episode_comparison
-from selfplay.demo_replay import render_demo
 from selfplay.belief_tracker import BeliefStateTracker
 
 __all__ = [
     "AdversaryAgent",
     "InvestigatorAgent",
     "SelfPlayTrainer",
-    "show_training_curves",
-    "show_episode_comparison",
-    "render_demo",
     "BeliefStateTracker",
 ]

@@ -10,11 +10,13 @@ from scenario.scenario import build_scenario, list_task_specs
 
 
 class RecallTraceEnv:
-    """Deterministic OpenEnv-style environment for product recall containment."""
+    """Deterministic OpenEnv-style environment for causal inference under partial observability."""
 
     ACTIONS = [
         "inspect_node",
         "trace_lot",
+        "cross_reference",
+        "request_lab_test",
         "quarantine",
         "notify",
         "finalize",
@@ -60,6 +62,8 @@ class RecallTraceEnv:
             "inspected_nodes": set(),
             "inspection_results": {},
             "traced_lots": {},
+            "cross_reference_results": {},
+            "lab_test_results": {},
             "notified_nodes": set(),
             "quarantine_log": [],
             "steps_taken": 0,
@@ -88,7 +92,7 @@ class RecallTraceEnv:
             self.done = True
             timeout_penalty = -0.25
             reward_signal = RewardSignal(
-                value=max(-1.0, reward_signal.value + timeout_penalty),
+                value=max(-5.0, reward_signal.value + timeout_penalty),
                 reason="Step budget exhausted before finalizing containment.",
                 components={**reward_signal.components, "timeout_penalty": timeout_penalty},
             )
@@ -123,12 +127,18 @@ class RecallTraceEnv:
             inspected_nodes=sorted(self.state_data["inspected_nodes"]),
             inspection_results=deepcopy(self.state_data["inspection_results"]),
             trace_results=deepcopy(self.state_data["traced_lots"]),
+            cross_reference_results=deepcopy(self.state_data["cross_reference_results"]),
+            lab_test_results=deepcopy(self.state_data["lab_test_results"]),
             notified_nodes=sorted(self.state_data["notified_nodes"]),
             quarantined_inventory=self._quarantine_snapshot(),
             history=list(self.state_data["history"]),
             steps_taken=self.state_data["steps_taken"],
             remaining_step_budget=max(0, self.state_data["max_steps"] - self.state_data["steps_taken"]),
         )
+
+    # ------------------------------------------------------------------
+    # Action handlers
+    # ------------------------------------------------------------------
 
     def _handle_inspect_node(self, action: RecallAction) -> tuple[RewardSignal, Dict[str, Any]]:
         node_id = self._require_node(action.node_id)
@@ -225,7 +235,7 @@ class RecallTraceEnv:
             },
         )
         info = StepInfo(
-            message=f"Traced lot {lot_id} across the shipment network.",
+            message=f"Traced lot {lot_id} across the network.",
             action_type=action.type.value,
             reward_breakdown=reward.components,
         ).model_dump()
@@ -240,6 +250,129 @@ class RecallTraceEnv:
                 "total_quantity": sum(impacted_quantities.values()),
             }
         )
+        return reward, info
+
+    def _handle_cross_reference(self, action: RecallAction) -> tuple[RewardSignal, Dict[str, Any]]:
+        """Check if two lots share a common origin within the lot catalog.
+
+        Returns boolean + shared ancestor if found. Critical for detecting
+        mixing events where contaminated and safe stock share a common origin.
+        """
+        lot_a = action.lot_id
+        lot_b = action.lot_id_2
+        if not lot_a or not lot_b:
+            raise ValueError("cross_reference action requires 'lot_id' and 'lot_id_2'.")
+
+        root_a = self._root_lot_for(lot_a)
+        root_b = self._root_lot_for(lot_b)
+        shared_origin = root_a == root_b
+
+        # Check if either lot has mixing metadata
+        catalog = self.state_data["lot_catalog"]
+        lot_a_info = catalog.get(lot_a, {})
+        lot_b_info = catalog.get(lot_b, {})
+        mixed_from_a = lot_a_info.get("mixed_from", [])
+        mixed_from_b = lot_b_info.get("mixed_from", [])
+
+        # Deeper check: do they appear in each other's mixing chains?
+        cross_mixed = bool(set(mixed_from_a) & {lot_b, root_b}) or bool(set(mixed_from_b) & {lot_a, root_a})
+
+        key = f"{lot_a}_x_{lot_b}"
+        self.state_data["cross_reference_results"][key] = {
+            "lot_a": lot_a,
+            "lot_b": lot_b,
+            "root_a": root_a,
+            "root_b": root_b,
+            "shared_origin": shared_origin,
+            "cross_mixed": cross_mixed,
+            "shared_ancestor": root_a if shared_origin else None,
+        }
+        self._record_history(f"Cross-referenced {lot_a} and {lot_b}: shared_origin={shared_origin}")
+
+        # Reward: useful if it reveals a connection to the contaminated lineage
+        contaminated_root = self.state_data["contaminated_lot_hint"]
+        is_informative = root_a == contaminated_root or root_b == contaminated_root
+
+        if shared_origin and is_informative:
+            reward_value = 0.15
+            reason = "Cross-reference confirmed shared contaminated ancestry."
+        elif not shared_origin and is_informative:
+            reward_value = 0.08
+            reason = "Cross-reference ruled out shared ancestry — useful negative result."
+        elif shared_origin:
+            reward_value = 0.04
+            reason = "Cross-reference found shared origin outside recall scope."
+        else:
+            reward_value = 0.01
+            reason = "Cross-reference returned no actionable signal."
+
+        reward = RewardSignal(
+            value=round(reward_value, 4),
+            reason=reason,
+            components={"cross_reference_value": round(reward_value, 4)},
+        )
+        info = StepInfo(
+            message=f"Cross-referenced {lot_a} and {lot_b}.",
+            action_type=action.type.value,
+            reward_breakdown=reward.components,
+        ).model_dump()
+        info.update({
+            "lot_a": lot_a,
+            "lot_b": lot_b,
+            "shared_origin": shared_origin,
+            "cross_mixed": cross_mixed,
+            "shared_ancestor": root_a if shared_origin else None,
+        })
+        return reward, info
+
+    def _handle_request_lab_test(self, action: RecallAction) -> tuple[RewardSignal, Dict[str, Any]]:
+        """High-confidence contamination test for a node. Costs 2 steps.
+
+        Returns P(contaminated) = 0.95 if truly contaminated, 0.05 otherwise.
+        Expensive but eliminates ambiguity — the agent must choose when to use it.
+        """
+        node_id = self._require_node(action.node_id)
+
+        # Lab test costs an extra step (2 total including this one)
+        self.state_data["steps_taken"] += 1
+
+        # Determine ground truth contamination status
+        is_contaminated = node_id in self.ground_truth["affected_nodes"]
+        confidence = 0.95 if is_contaminated else 0.05
+
+        key = node_id
+        self.state_data["lab_test_results"][key] = {
+            "node_id": node_id,
+            "p_contaminated": confidence,
+            "result": "positive" if is_contaminated else "negative",
+            "high_confidence": True,
+        }
+        self._record_history(f"Lab test at {node_id}: P(contaminated)={confidence:.2f}")
+
+        # Reward: informative but costly
+        if is_contaminated:
+            reward_value = 0.12
+            reason = f"Lab test confirmed contamination at {node_id} with P={confidence}."
+        else:
+            reward_value = 0.05
+            reason = f"Lab test confirmed {node_id} is clean with P={confidence}."
+
+        reward = RewardSignal(
+            value=round(reward_value, 4),
+            reason=reason,
+            components={"lab_test_value": round(reward_value, 4)},
+        )
+        info = StepInfo(
+            message=f"Lab test completed at {node_id}.",
+            action_type=action.type.value,
+            reward_breakdown=reward.components,
+        ).model_dump()
+        info.update({
+            "node_id": node_id,
+            "p_contaminated": confidence,
+            "result": "positive" if is_contaminated else "negative",
+            "steps_consumed": 2,
+        })
         return reward, info
 
     def _handle_quarantine(self, action: RecallAction) -> tuple[RewardSignal, Dict[str, Any]]:
@@ -425,6 +558,10 @@ class RecallTraceEnv:
             }
         )
         return reward, info
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
 
     def _build_ground_truth(self, scenario: Dict[str, Any]) -> Dict[str, Any]:
         contaminated_roots = {

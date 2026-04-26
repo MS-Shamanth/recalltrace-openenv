@@ -1,627 +1,222 @@
-/* ===== RecallTrace Frontend — app.js ===== */
+﻿const taskSelect = document.getElementById("task-select");
+const taskSummary = document.getElementById("task-summary");
+const currentScore = document.getElementById("current-score");
+const currentSteps = document.getElementById("current-steps");
+const currentStatus = document.getElementById("current-status");
+const allScore = document.getElementById("all-score");
+const allResults = document.getElementById("all-results");
+const episodeLog = document.getElementById("episode-log");
+const rewardChart = document.getElementById("reward-chart");
+const finalSummary = document.getElementById("final-summary");
 
-// ---------------------------------------------------------------------------
-// Particle Background
-// ---------------------------------------------------------------------------
-(function initParticles() {
-  const canvas = document.getElementById('particles-canvas');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  let particles = [];
-  function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
-  resize(); window.addEventListener('resize', resize);
-  for (let i = 0; i < 60; i++) {
-    particles.push({ x: Math.random()*canvas.width, y: Math.random()*canvas.height,
-      r: Math.random()*1.5+0.5, dx: (Math.random()-0.5)*0.3, dy: (Math.random()-0.5)*0.3,
-      o: Math.random()*0.4+0.1 });
-  }
-  function draw() {
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    particles.forEach(p => {
-      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
-      ctx.fillStyle = `rgba(255,111,60,${p.o})`; ctx.fill();
-      p.x += p.dx; p.y += p.dy;
-      if (p.x<0||p.x>canvas.width) p.dx*=-1;
-      if (p.y<0||p.y>canvas.height) p.dy*=-1;
-    });
-    requestAnimationFrame(draw);
-  }
-  draw();
-})();
-
-// ---------------------------------------------------------------------------
-// Tab Navigation
-// ---------------------------------------------------------------------------
-function switchTab(tab) {
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab===tab));
-  document.querySelectorAll('.tab-content').forEach(s => s.classList.toggle('active', s.id==='tab-'+tab));
-}
-
-// ---------------------------------------------------------------------------
-// Slider values
-// ---------------------------------------------------------------------------
-const epSlider = document.getElementById('episode-slider');
-const epVal = document.getElementById('episode-value');
-const nodesSlider = document.getElementById('nodes-slider');
-const nodesVal = document.getElementById('nodes-value');
-if (epSlider) epSlider.oninput = () => epVal.textContent = epSlider.value;
-if (nodesSlider) nodesSlider.oninput = () => nodesVal.textContent = nodesSlider.value;
-
-// ---------------------------------------------------------------------------
-// Graph Visualization
-// ---------------------------------------------------------------------------
-let graphData = null;
-
-function drawGraph(nodes, edges, highlights) {
-  highlights = highlights || {};
-  const edgesG = document.getElementById('graph-edges');
-  const nodesG = document.getElementById('graph-nodes');
-  const labelsG = document.getElementById('graph-labels');
-  const overlaysG = document.getElementById('graph-overlays');
-  edgesG.innerHTML = ''; nodesG.innerHTML = ''; labelsG.innerHTML = ''; overlaysG.innerHTML = '';
-
-  const W = 800, H = 480, PAD = 60;
-
-  // Draw edges
-  edges.forEach(e => {
-    const from = nodes.find(n=>n.id===e.from);
-    const to = nodes.find(n=>n.id===e.to);
-    if (!from||!to) return;
-    const x1=PAD+from.x*(W-2*PAD), y1=PAD+from.y*(H-2*PAD);
-    const x2=PAD+to.x*(W-2*PAD), y2=PAD+to.y*(H-2*PAD);
-    const isActive = highlights.pathEdges && highlights.pathEdges.some(pe=>pe[0]===e.from&&pe[1]===e.to);
-    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
-    line.setAttribute('x1',x1); line.setAttribute('y1',y1);
-    line.setAttribute('x2',x2); line.setAttribute('y2',y2);
-    line.setAttribute('stroke', isActive?'#58a6ff':'rgba(255,255,255,0.12)');
-    line.setAttribute('stroke-width', isActive?'2.5':'1');
-    line.setAttribute('marker-end', isActive?'url(#arrowhead-active)':'url(#arrowhead)');
-    if(isActive) line.setAttribute('filter','url(#glow)');
-    edgesG.appendChild(line);
-  });
-
-  // Draw nodes
-  nodes.forEach(n => {
-    const cx=PAD+n.x*(W-2*PAD), cy=PAD+n.y*(H-2*PAD), r=22;
-    const visited = highlights.visited && highlights.visited.includes(n.id);
-    const quarantined = highlights.quarantined && highlights.quarantined.includes(n.id);
-    const safe = highlights.safe && highlights.safe.includes(n.id);
-    const isContam = n.contaminated;
-
-    // Contamination ring
-    if (isContam && highlights.showContam) {
-      const ring = document.createElementNS('http://www.w3.org/2000/svg','circle');
-      ring.setAttribute('cx',cx); ring.setAttribute('cy',cy); ring.setAttribute('r',r+6);
-      ring.setAttribute('fill','none'); ring.setAttribute('stroke','#d29922');
-      ring.setAttribute('stroke-width','2'); ring.setAttribute('stroke-dasharray','5 3');
-      ring.setAttribute('opacity','0.7');
-      nodesG.appendChild(ring);
-    }
-
-    // Node circle
-    const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
-    circle.setAttribute('cx',cx); circle.setAttribute('cy',cy); circle.setAttribute('r',r);
-    let fill='#21262d', stroke='#444c56', sw='1.5';
-    if (quarantined) { fill='#da3633'; stroke='#ff6b6b'; sw='3'; }
-    else if (safe) { fill='#1a3a2a'; stroke='#2ea043'; sw='2.5'; }
-    else if (visited) { fill='#2d2a1a'; stroke='#f0c040'; sw='2.5'; }
-    circle.setAttribute('fill',fill); circle.setAttribute('stroke',stroke); circle.setAttribute('stroke-width',sw);
-    if(quarantined) circle.setAttribute('filter','url(#glow)');
-    nodesG.appendChild(circle);
-
-    // Quarantine X
-    if (quarantined) {
-      const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
-      txt.setAttribute('x',cx); txt.setAttribute('y',cy+5);
-      txt.setAttribute('text-anchor','middle'); txt.setAttribute('fill','white');
-      txt.setAttribute('font-size','16'); txt.setAttribute('font-weight','bold');
-      txt.textContent = '✖'; nodesG.appendChild(txt);
-    }
-    // Safe check
-    if (safe && !quarantined) {
-      const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
-      txt.setAttribute('x',cx); txt.setAttribute('y',cy+5);
-      txt.setAttribute('text-anchor','middle'); txt.setAttribute('fill','#2ea043');
-      txt.setAttribute('font-size','15'); txt.setAttribute('font-weight','bold');
-      txt.textContent = '✔'; nodesG.appendChild(txt);
-    }
-
-    // Label
-    const label = document.createElementNS('http://www.w3.org/2000/svg','text');
-    label.setAttribute('x',cx); label.setAttribute('y',cy+r+16);
-    label.setAttribute('text-anchor','middle'); label.setAttribute('fill','#e8edf5');
-    label.setAttribute('font-size','10'); label.setAttribute('font-weight','600');
-    label.setAttribute('font-family','Inter, sans-serif');
-    label.textContent = n.label; labelsG.appendChild(label);
-
-    // Belief probability
-    if (highlights.beliefs && highlights.beliefs[n.id] !== undefined) {
-      const p = highlights.beliefs[n.id];
-      const bColor = p>=0.75?'#7ee787': p>=0.5?'#fbbf24':'#8b949e';
-      const bg = document.createElementNS('http://www.w3.org/2000/svg','rect');
-      bg.setAttribute('x',cx+r+4); bg.setAttribute('y',cy-10);
-      bg.setAttribute('width','46'); bg.setAttribute('height','18');
-      bg.setAttribute('rx','6'); bg.setAttribute('fill','rgba(13,17,23,0.85)');
-      bg.setAttribute('stroke',bColor); bg.setAttribute('stroke-width','1');
-      overlaysG.appendChild(bg);
-      const bTxt = document.createElementNS('http://www.w3.org/2000/svg','text');
-      bTxt.setAttribute('x',cx+r+27); bTxt.setAttribute('y',cy+2);
-      bTxt.setAttribute('text-anchor','middle'); bTxt.setAttribute('fill',bColor);
-      bTxt.setAttribute('font-size','9'); bTxt.setAttribute('font-weight','700');
-      bTxt.setAttribute('font-family','JetBrains Mono, monospace');
-      bTxt.textContent = 'P='+p.toFixed(2); overlaysG.appendChild(bTxt);
-    }
-  });
-}
-
-async function loadGraph() {
-  try {
-    const res = await fetch('/api/graph/structure');
-    graphData = await res.json();
-    drawGraph(graphData.nodes, graphData.edges, {});
-  } catch(e) { console.warn('Graph load failed', e); }
-}
-
-// ---------------------------------------------------------------------------
-// Belief State Panel
-// ---------------------------------------------------------------------------
-function updateBeliefBars(beliefs, step) {
-  const container = document.getElementById('belief-bars');
-  const badge = document.getElementById('belief-step');
-  if (badge) badge.textContent = 'Step ' + (step||0);
-  if (!beliefs || Object.keys(beliefs).length===0) {
-    container.innerHTML = '<div class="belief-empty">Run simulation to see belief state</div>';
-    return;
-  }
-  const sorted = Object.entries(beliefs).sort((a,b)=>b[1]-a[1]);
-  container.innerHTML = sorted.map(([name, p]) => {
-    const pct = (p*100).toFixed(0);
-    const color = p>=0.85?'#da3633': p>=0.5?'#f0c040': p>=0.3?'#fbbf24':'rgba(255,255,255,0.15)';
-    const txtColor = p>=0.85?'#ff6b6b': p>=0.5?'#fbbf24':'#8b949e';
-    return `<div class="belief-row">
-      <span class="belief-name">${name.replace(/_/g,' ')}</span>
-      <div class="belief-bar-track"><div class="belief-bar-fill" style="width:${pct}%;background:${color}"></div></div>
-      <span class="belief-prob" style="color:${txtColor}">${p.toFixed(2)}</span>
-    </div>`;
-  }).join('');
-}
-
-// ---------------------------------------------------------------------------
-// Self-Play Training
-// ---------------------------------------------------------------------------
-let trainingData = null;
-
-async function runSelfPlay() {
-  const btn = document.getElementById('btn-train');
-  const prog = document.getElementById('progress-container');
-  const fill = document.getElementById('progress-fill');
-  const pText = document.getElementById('progress-text');
-  btn.disabled = true;
-  prog.classList.remove('hidden');
-  fill.style.width = '10%';
-  pText.textContent = 'Starting training...';
-
-  const numEp = parseInt(epSlider.value);
-  const numNodes = parseInt(nodesSlider.value);
-
-  try {
-    fill.style.width = '30%'; pText.textContent = `Training ${numEp} episodes...`;
-    const res = await fetch('/api/selfplay/run', {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({num_episodes:numEp, num_nodes:numNodes})
-    });
-    fill.style.width = '80%'; pText.textContent = 'Processing results...';
-    const data = await res.json();
-    trainingData = data;
-    fill.style.width = '100%'; pText.textContent = 'Done!';
-    document.getElementById('sim-status-badge').textContent = 'Trained ✓';
-
-    // Update charts
-    renderTrainingCharts(data.episodes);
-    renderTrainingSummary(data.summary);
-
-    // Show last episode on graph
-    const last = data.episodes[data.episodes.length-1];
-    updateEpisodeDisplay(last);
-
-    // Auto-show comparison
-    showComparison(data.episodes);
-
-    setTimeout(()=>{ prog.classList.add('hidden'); btn.disabled=false; }, 1500);
-  } catch(e) {
-    pText.textContent = 'Error: '+e.message;
-    btn.disabled = false;
-  }
-}
-
-function updateEpisodeDisplay(ep) {
-  document.getElementById('ep-f1').textContent = ep.investigator_f1.toFixed(3);
-  document.getElementById('ep-f1').style.color = ep.investigator_f1>0.7?'#2ea043':'#da3633';
-  document.getElementById('ep-quarantined').textContent = ep.num_quarantined;
-  document.getElementById('ep-steps').textContent = ep.steps_taken;
-  document.getElementById('ep-intervention').textContent = (ep.intervention_type||'—').replace(/_/g,' ');
-
-  // Update belief bars with simulated beliefs
-  const beliefs = {};
-  if (ep.nodes_quarantined_list) {
-    ep.nodes_quarantined_list.forEach(n => beliefs[n] = 0.85+Math.random()*0.1);
-  }
-  if (ep.nodes_visited) {
-    ep.nodes_visited.forEach(n => { if(!beliefs[n]) beliefs[n]=0.2+Math.random()*0.4; });
-  }
-  updateBeliefBars(beliefs, ep.steps_taken);
-
-  // Update graph if available
-  if (graphData) {
-    const safe = graphData.nodes.filter(n=>!n.contaminated).map(n=>n.id)
-      .filter(n=>!ep.nodes_quarantined_list.includes(n));
-    drawGraph(graphData.nodes, graphData.edges, {
-      visited: ep.nodes_visited||[],
-      quarantined: ep.nodes_quarantined_list||[],
-      safe: safe.slice(0,3),
-      showContam: true, beliefs: beliefs,
-    });
-  }
-}
-
-function showComparison(episodes) {
-  const panel = document.getElementById('comparison-panel');
-  panel.classList.remove('hidden');
-  const early = episodes.slice(0,30);
-  const late = episodes.slice(-30);
-  const worst = early.reduce((a,b)=>a.investigator_f1<b.investigator_f1?a:b);
-  const best = late.reduce((a,b)=>a.investigator_f1>b.investigator_f1?a:b);
-
-  document.getElementById('comp-early-ep').textContent = worst.episode;
-  document.getElementById('comp-early-f1').textContent = 'F1 = '+worst.investigator_f1.toFixed(3);
-  document.getElementById('comp-early-stats').innerHTML =
-    `Quarantined: ${worst.num_quarantined} nodes<br>Steps: ${worst.steps_taken}<br>` +
-    `Threshold: ${worst.quarantine_threshold.toFixed(3)}<br>Exploration: ${worst.exploration_rate.toFixed(3)}<br>` +
-    `Intervention: ${(worst.intervention_type||'—').replace(/_/g,' ')}`;
-
-  document.getElementById('comp-late-ep').textContent = best.episode;
-  document.getElementById('comp-late-f1').textContent = 'F1 = '+best.investigator_f1.toFixed(3);
-  document.getElementById('comp-late-stats').innerHTML =
-    `Quarantined: ${best.num_quarantined} nodes<br>Steps: ${best.steps_taken}<br>` +
-    `Threshold: ${best.quarantine_threshold.toFixed(3)}<br>Exploration: ${best.exploration_rate.toFixed(3)}<br>` +
-    `Intervention: ${(best.intervention_type||'—').replace(/_/g,' ')}<br>` +
-    `Identified: ${best.intervention_correctly_identified?'YES ✓':'NO'}`;
-}
-
-async function runReplay() {
-  const btn = document.getElementById('btn-replay');
-  btn.disabled = true;
-  try {
-    const res = await fetch('/api/selfplay/demo');
-    const data = await res.json();
-    trainingData = {episodes: data.all_stats, summary:{}};
-    graphData = data.graph;
-    renderTrainingCharts(data.all_stats);
-    showComparison(data.all_stats);
-    const last = data.all_stats[data.all_stats.length-1];
-    updateEpisodeDisplay(last);
-    document.getElementById('sim-status-badge').textContent = 'Demo Loaded';
-  } catch(e) { console.error(e); }
-  btn.disabled = false;
-}
-
-// ---------------------------------------------------------------------------
-// SVG Chart Rendering
-// ---------------------------------------------------------------------------
-function renderTrainingCharts(episodes) {
-  switchTab('training');
-  renderChart('chart-f1', episodes, 'investigator_f1', '#60a5fa', '#3b82f6', 0, 1.05);
-  renderChart('chart-adv', episodes, 'adversary_reward', '#f87171', '#ef4444', -1.3, 1.3);
-  renderChart('chart-quarantined', episodes, 'num_quarantined', '#4ade80', '#22c55e');
-  renderChart('chart-steps', episodes, 'steps_taken', '#fbbf24', '#f59e0b');
-
-  const late = episodes.slice(-20);
-  const el = (id,v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
-  el('chart-f1-badge', (late.reduce((s,e)=>s+e.investigator_f1,0)/late.length).toFixed(3));
-  el('chart-adv-badge', (late.reduce((s,e)=>s+e.adversary_reward,0)/late.length).toFixed(3));
-  el('chart-q-badge', (late.reduce((s,e)=>s+e.num_quarantined,0)/late.length).toFixed(1));
-  el('chart-s-badge', (late.reduce((s,e)=>s+e.steps_taken,0)/late.length).toFixed(1));
-
-  switchTab('simulation');
-}
-
-function renderChart(containerId, episodes, key, lineColor, dotColor, yMin, yMax) {
-  const container = document.getElementById(containerId);
-  if (!container) return;
-  const values = episodes.map(e=>e[key]);
-  if (yMin===undefined) yMin = Math.min(...values)*0.9;
-  if (yMax===undefined) yMax = Math.max(...values)*1.1;
-  const range = Math.max(yMax-yMin, 0.1);
-
-  const W=500, H=240, P=40, PR=20, PT=20, PB=30;
-  const plotW=W-P-PR, plotH=H-PT-PB;
-  const toX = i => P + (i/(episodes.length-1))*plotW;
-  const toY = v => PT + (1-(v-yMin)/range)*plotH;
-
-  // Rolling average
-  const rolling = []; const win=20;
-  for(let i=0;i<values.length;i++){
-    const start=Math.max(0,i-win+1);
-    rolling.push(values.slice(start,i+1).reduce((a,b)=>a+b,0)/(i-start+1));
-  }
-
-  // Build SVG
-  const rawPts = values.map((v,i)=>`${toX(i)},${toY(v)}`);
-  const avgPts = rolling.map((v,i)=>`${toX(i)},${toY(v)}`);
-
-  // Grid lines
-  let gridLines = '';
-  for(let i=0;i<=4;i++){
-    const y=PT+i*(plotH/4);
-    const val=(yMax-i*(range/4)).toFixed(2);
-    gridLines+=`<line x1="${P}" y1="${y}" x2="${W-PR}" y2="${y}" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>`;
-    gridLines+=`<text x="${P-6}" y="${y+4}" text-anchor="end" fill="#8b949e" font-size="9" font-family="JetBrains Mono">${val}</text>`;
-  }
-
-  // Axis labels
-  const numLabels = Math.min(5, episodes.length);
-  let axisLabels = '';
-  for(let i=0;i<numLabels;i++){
-    const idx=Math.floor(i*(episodes.length-1)/(numLabels-1));
-    axisLabels+=`<text x="${toX(idx)}" y="${H-6}" text-anchor="middle" fill="#8b949e" font-size="9" font-family="JetBrains Mono">${episodes[idx].episode}</text>`;
-  }
-
-  container.innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
-    ${gridLines}
-    <line x1="${P}" y1="${PT}" x2="${P}" y2="${H-PB}" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-    <line x1="${P}" y1="${H-PB}" x2="${W-PR}" y2="${H-PB}" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>
-    <polyline points="${rawPts.join(' ')}" fill="none" stroke="${dotColor}" stroke-width="1" opacity="0.2"/>
-    <polyline points="${avgPts.join(' ')}" fill="none" stroke="${lineColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
-    ${axisLabels}
-  </svg>`;
-}
-
-function renderTrainingSummary(summary) {
-  const panel = document.getElementById('training-summary');
-  const content = document.getElementById('training-summary-content');
-  if (!panel||!content||!summary) return;
-  panel.classList.remove('hidden');
-  content.innerHTML = [
-    ['Early F1', summary.early_f1?.toFixed(3)||'—'],
-    ['Late F1', summary.late_f1?.toFixed(3)||'—'],
-    ['Early Quarantined', summary.early_quarantined||'—'],
-    ['Late Quarantined', summary.late_quarantined||'—'],
-    ['Early Steps', summary.early_steps||'—'],
-    ['Late Steps', summary.late_steps||'—'],
-  ].map(([l,v])=>`<div class="summary-item"><span class="summary-item-label">${l}</span><span class="summary-item-value">${v}</span></div>`).join('');
-}
-
-// ---------------------------------------------------------------------------
-// OpenEnv Runner (preserved from original)
-// ---------------------------------------------------------------------------
-const taskSelect = document.getElementById('task-select');
 let taskCatalog = [];
 
 function renderTaskSummary(task) {
-  const el = document.getElementById('task-summary');
-  if(!el) return;
-  el.innerHTML = `<h3>${task.name}</h3><p><strong>Difficulty:</strong> ${task.difficulty}</p><p>${task.objective}</p><p><strong>Max steps:</strong> ${task.max_steps}</p>`;
+  taskSummary.innerHTML = `
+    <h3>${task.name}</h3>
+    <p><strong>Difficulty:</strong> ${task.difficulty}</p>
+    <p>${task.objective}</p>
+    <p><strong>Max steps:</strong> ${task.max_steps}</p>
+  `;
+}
+
+function buildLineChart(logs) {
+  if (!logs.length) {
+    rewardChart.innerHTML = "No rewards available.";
+    return;
+  }
+
+  const width = 380;
+  const height = 220;
+  const padding = 28;
+  const values = logs.map((entry) => entry.reward);
+  const maxReward = Math.max(...values, 1);
+  const minReward = Math.min(...values, 0);
+  const range = Math.max(maxReward - minReward, 0.25);
+
+  const toX = (index) => {
+    if (logs.length === 1) {
+      return width / 2;
+    }
+    return padding + (index * (width - padding * 2)) / (logs.length - 1);
+  };
+
+  const toY = (value) => {
+    return height - padding - ((value - minReward) / range) * (height - padding * 2);
+  };
+
+  const linePoints = logs
+    .map((entry, index) => `${toX(index)},${toY(entry.reward)}`)
+    .join(" ");
+
+  const horizontalGuides = [0, 0.25, 0.5, 0.75, 1]
+    .map((ratio) => {
+      const y = padding + ratio * (height - padding * 2);
+      return `<line class="chart-grid" x1="${padding}" y1="${y}" x2="${width - padding}" y2="${y}"></line>`;
+    })
+    .join("");
+
+  const labels = logs
+    .map((entry, index) => {
+      const x = toX(index);
+      return `<text class="chart-label" x="${x}" y="${height - 8}" text-anchor="middle">S${entry.step}</text>`;
+    })
+    .join("");
+
+  const points = logs
+    .map((entry, index) => {
+      const x = toX(index);
+      const y = toY(entry.reward);
+      return `
+        <circle class="chart-point" cx="${x}" cy="${y}" r="5"></circle>
+        <text class="chart-label" x="${x}" y="${y - 10}" text-anchor="middle">${entry.reward.toFixed(2)}</text>
+      `;
+    })
+    .join("");
+
+  rewardChart.innerHTML = `
+    <svg viewBox="0 0 ${width} ${height}" aria-label="Reward line chart">
+      ${horizontalGuides}
+      <line class="chart-axis" x1="${padding}" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}"></line>
+      <line class="chart-axis" x1="${padding}" y1="${padding}" x2="${padding}" y2="${height - padding}"></line>
+      <polyline class="chart-line" points="${linePoints}"></polyline>
+      ${points}
+      ${labels}
+    </svg>
+  `;
+}
+
+function renderEpisode(data) {
+  currentScore.textContent = data.score.toFixed(4);
+  currentSteps.textContent = String(data.steps_taken);
+  currentStatus.textContent = data.success ? "Contained" : "Needs work";
+
+  buildLineChart(data.logs);
+
+  finalSummary.innerHTML = `
+    <div class="summary-grid">
+      <div class="summary-pill">
+        <span>Final score</span>
+        <strong>${data.score.toFixed(4)}</strong>
+      </div>
+      <div class="summary-pill">
+        <span>Status</span>
+        <strong>${data.success ? "Success" : "Needs improvement"}</strong>
+      </div>
+      <div class="summary-pill">
+        <span>Steps used</span>
+        <strong>${data.steps_taken}</strong>
+      </div>
+      <div class="summary-pill">
+        <span>Quarantine quality</span>
+        <strong>${(data.final_info.quarantine_score ?? 0).toFixed(4)}</strong>
+      </div>
+    </div>
+    <div class="summary-card">
+      <strong>Containment outcome</strong>
+      <div>All affected nodes notified: ${data.final_info.all_affected_nodes_notified ? "Yes" : "No"}</div>
+      <div>All affected stock quarantined: ${data.final_info.all_affected_stock_quarantined ? "Yes" : "No"}</div>
+    </div>
+    <div class="summary-card">
+      <strong>Grader focus</strong>
+      <div>Notification score: ${(data.final_info.notification_score ?? 0).toFixed(4)}</div>
+      <div>Investigation score: ${(data.final_info.investigation_score ?? 0).toFixed(4)}</div>
+      <div>Efficiency score: ${(data.final_info.efficiency_score ?? 0).toFixed(4)}</div>
+    </div>
+  `;
+
+  const logMarkup = data.logs.map((entry) => {
+    const actionType = entry.action.type || "action";
+    const detailBits = [];
+    if (entry.action.node_id) detailBits.push(`Node: ${entry.action.node_id}`);
+    if (entry.action.lot_id) detailBits.push(`Lot: ${entry.action.lot_id}`);
+    if (entry.action.quantity) detailBits.push(`Qty: ${entry.action.quantity}`);
+
+    return `
+      <div class="log-step">
+        <div class="log-title">
+          <strong>Step ${entry.step}</strong>
+          <span class="action-chip">${actionType.replace("_", " ")}</span>
+        </div>
+        <div class="action-meta">
+          <div>${detailBits.length ? detailBits.join(" | ") : "No extra parameters"}</div>
+          <div>Reward: ${entry.reward.toFixed(4)}</div>
+          <div>Message: ${entry.message || "-"}</div>
+        </div>
+      </div>
+    `;
+  }).join("");
+
+  episodeLog.innerHTML = `
+    <div class="log-step">
+      <strong>Task:</strong> ${data.task.name}
+    </div>
+    ${logMarkup}
+  `;
+}
+
+function renderRunAll(data) {
+  allScore.textContent = data.average_score.toFixed(4);
+  allResults.innerHTML = data.episodes.map((episode) => `
+    <div class="log-step">
+      <strong>${episode.task.name}</strong>
+      <div>Difficulty: ${episode.task.difficulty}</div>
+      <div>Score: ${episode.score.toFixed(4)}</div>
+      <div>Steps: ${episode.steps_taken}</div>
+      <div>Status: ${episode.success ? "Success" : "Needs work"}</div>
+    </div>
+  `).join("");
 }
 
 async function fetchTasks() {
-  try {
-    const res = await fetch('/api/tasks');
-    const data = await res.json();
-    taskCatalog = data.tasks;
-    if(taskSelect) {
-      taskSelect.innerHTML = taskCatalog.map(t=>`<option value="${t.task_id}">${t.difficulty.toUpperCase()} - ${t.name}</option>`).join('');
-      renderTaskSummary(taskCatalog[0]);
-    }
-  } catch(e) { console.warn('Tasks fetch failed', e); }
-}
+  const response = await fetch("/api/tasks");
+  const data = await response.json();
+  taskCatalog = data.tasks;
 
-if(taskSelect) taskSelect.addEventListener('change', ()=>{
-  const task = taskCatalog.find(t=>t.task_id===taskSelect.value);
-  if(task) renderTaskSummary(task);
-});
+  taskSelect.innerHTML = taskCatalog.map((task) => `
+    <option value="${task.task_id}">${task.difficulty.toUpperCase()} - ${task.name}</option>
+  `).join("");
+
+  renderTaskSummary(taskCatalog[0]);
+}
 
 async function resetTask() {
-  const res = await fetch(`/reset?task_id=${encodeURIComponent(taskSelect.value)}`);
-  const data = await res.json();
-  document.getElementById('current-score').textContent = '—';
-  document.getElementById('current-steps').textContent = data.steps_taken||0;
-  document.getElementById('current-status').textContent = 'Reset';
+  const taskId = taskSelect.value;
+  const response = await fetch(`/reset?task_id=${encodeURIComponent(taskId)}`);
+  const data = await response.json();
+  currentScore.textContent = "-";
+  currentSteps.textContent = String(data.steps_taken || 0);
+  currentStatus.textContent = "Reset";
+  rewardChart.innerHTML = "Task reset. Run a task to render the reward trajectory.";
+  finalSummary.innerHTML = "Readable scoring highlights will appear here.";
+  episodeLog.textContent = JSON.stringify(data, null, 2);
 }
 
-async function runOpenEnvEpisode() {
-  const res = await fetch('/api/run_episode', {
-    method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({task_id: taskSelect.value})
+async function runEpisode() {
+  const response = await fetch("/api/run_episode", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ task_id: taskSelect.value }),
   });
-  const data = await res.json();
-  document.getElementById('current-score').textContent = data.score.toFixed(4);
-  document.getElementById('current-steps').textContent = data.steps_taken;
-  document.getElementById('current-status').textContent = data.success?'Contained':'Needs work';
-
-  // Reward chart
-  renderOERewardChart(data.logs);
-  renderOEFinalSummary(data);
-  renderOELog(data);
+  const data = await response.json();
+  renderEpisode(data);
 }
 
 async function runAllTasks() {
-  const res = await fetch('/api/run_all');
-  const data = await res.json();
-  document.getElementById('all-score').textContent = data.average_score.toFixed(4);
-  document.getElementById('all-results').innerHTML = data.episodes.map(ep=>
-    `<div class="log-step"><strong>${ep.task.name}</strong><div>Score: ${ep.score.toFixed(4)} | Steps: ${ep.steps_taken} | ${ep.success?'Success':'Needs work'}</div></div>`
-  ).join('');
+  const response = await fetch("/api/run_all");
+  const data = await response.json();
+  renderRunAll(data);
 }
 
-function renderOERewardChart(logs) {
-  const el = document.getElementById('oe-reward-chart');
-  if(!el||!logs.length) return;
-  const W=360, H=180, P=30;
-  const vals=logs.map(l=>l.reward);
-  const mx=Math.max(...vals,0.5), mn=Math.min(...vals,0);
-  const range=Math.max(mx-mn,0.1);
-  const toX=i=>P+(i/(logs.length-1||1))*(W-2*P);
-  const toY=v=>H-P-((v-mn)/range)*(H-2*P);
-  const pts=vals.map((v,i)=>`${toX(i)},${toY(v)}`).join(' ');
-  const dots=vals.map((v,i)=>`<circle cx="${toX(i)}" cy="${toY(v)}" r="3" fill="#ff6f3c" stroke="#fff" stroke-width="1.5"/>`).join('');
-  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}"><polyline points="${pts}" fill="none" stroke="#38d39f" stroke-width="2.5" stroke-linecap="round"/>${dots}</svg>`;
-}
-
-function renderOEFinalSummary(data) {
-  const el=document.getElementById('oe-final-summary');
-  if(!el) return;
-  el.innerHTML=`<div class="stats-grid">
-    <div class="mini-stat"><span class="mini-stat-label">Score</span><span class="mini-stat-value">${data.score.toFixed(4)}</span></div>
-    <div class="mini-stat"><span class="mini-stat-label">Status</span><span class="mini-stat-value">${data.success?'Success':'Needs work'}</span></div>
-    <div class="mini-stat"><span class="mini-stat-label">Steps</span><span class="mini-stat-value">${data.steps_taken}</span></div>
-    <div class="mini-stat"><span class="mini-stat-label">Quarantine</span><span class="mini-stat-value">${(data.final_info.quarantine_score??0).toFixed(4)}</span></div>
-  </div>`;
-}
-
-function renderOELog(data) {
-  const el=document.getElementById('oe-episode-log');
-  if(!el) return;
-  el.innerHTML = data.logs.map(entry=>{
-    const bits=[];
-    if(entry.action.node_id) bits.push('Node: '+entry.action.node_id);
-    if(entry.action.lot_id) bits.push('Lot: '+entry.action.lot_id);
-    if(entry.action.quantity) bits.push('Qty: '+entry.action.quantity);
-    return `<div class="log-step"><div class="log-title"><strong>Step ${entry.step}</strong><span class="action-chip">${(entry.action.type||'').replace('_',' ')}</span></div><div class="action-meta"><div>${bits.join(' | ')||'—'}</div><div>Reward: ${entry.reward.toFixed(4)}</div></div></div>`;
-  }).join('');
-}
-
-// ---------------------------------------------------------------------------
-// LLM Agent Demo
-// ---------------------------------------------------------------------------
-
-async function checkLLMStatus() {
-  const badge = document.getElementById('llm-status-badge');
-  try {
-    const res = await fetch('/api/llm/status');
-    const data = await res.json();
-    if (data.gpu_available) {
-      badge.textContent = data.model_loaded ? '✅ Model Ready' : `✅ GPU: ${data.gpu_name}`;
-      badge.style.background = 'rgba(46,160,67,0.2)';
-      badge.style.color = '#2ea043';
-    } else {
-      badge.textContent = '⚠ CPU Only';
-      badge.style.background = 'rgba(210,153,34,0.2)';
-      badge.style.color = '#d29922';
-    }
-  } catch(e) {
-    badge.textContent = '❌ Offline';
-    badge.style.background = 'rgba(218,54,51,0.2)';
-    badge.style.color = '#da3633';
+taskSelect.addEventListener("change", () => {
+  const task = taskCatalog.find((item) => item.task_id === taskSelect.value);
+  if (task) {
+    renderTaskSummary(task);
   }
-}
+});
 
-async function populateLLMTasks() {
-  try {
-    const res = await fetch('/api/tasks');
-    const data = await res.json();
-    const select = document.getElementById('llm-task-select');
-    if (select && data.tasks) {
-      data.tasks.forEach(t => {
-        const opt = document.createElement('option');
-        opt.value = t.task_id;
-        opt.textContent = `${t.difficulty.toUpperCase()} — ${t.name}`;
-        select.appendChild(opt);
-      });
-    }
-  } catch(e) { console.warn('LLM tasks fetch failed', e); }
-}
+document.getElementById("reset-button").addEventListener("click", resetTask);
+document.getElementById("run-button").addEventListener("click", runEpisode);
+document.getElementById("run-all-button").addEventListener("click", runAllTasks);
 
-async function runLLMEpisode() {
-  const btn = document.getElementById('btn-llm-run');
-  const prog = document.getElementById('llm-progress');
-  const fill = document.getElementById('llm-progress-fill');
-  const pText = document.getElementById('llm-progress-text');
-  const results = document.getElementById('llm-results');
-
-  btn.disabled = true;
-  prog.classList.remove('hidden');
-  results.classList.add('hidden');
-  fill.style.width = '15%';
-  pText.textContent = 'Loading model (first run may take ~30s)...';
-
-  const taskId = document.getElementById('llm-task-select').value;
-  const body = taskId ? {task_id: taskId} : {};
-
-  try {
-    fill.style.width = '40%';
-    pText.textContent = 'Running LLM agent on task...';
-
-    const res = await fetch('/api/llm/run_episode', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify(body),
-    });
-
-    fill.style.width = '90%';
-    pText.textContent = 'Rendering results...';
-
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || 'Server error');
-    }
-
-    const data = await res.json();
-    fill.style.width = '100%';
-    pText.textContent = 'Done!';
-
-    // Populate score cards
-    document.getElementById('llm-score').textContent = data.score.toFixed(4);
-    document.getElementById('llm-score').style.color = data.score >= 0.9 ? '#2ea043' : data.score >= 0.5 ? '#f0c040' : '#da3633';
-    document.getElementById('llm-reward').textContent = data.total_reward.toFixed(4);
-    document.getElementById('llm-steps').textContent = data.steps_taken;
-    document.getElementById('llm-task-name').textContent = data.task?.name || '—';
-
-    // Render step log
-    const logEl = document.getElementById('llm-episode-log');
-    logEl.innerHTML = data.steps.map(s => {
-      const actionType = (s.action.type || '').replace(/_/g, ' ');
-      const bits = [];
-      if (s.action.node_id) bits.push('Node: ' + s.action.node_id);
-      if (s.action.lot_id) bits.push('Lot: ' + s.action.lot_id);
-      if (s.action.quantity) bits.push('Qty: ' + s.action.quantity);
-      const fallbackTag = s.used_fallback
-        ? '<span class="action-chip" style="background:rgba(210,153,34,0.2);color:#d29922">fallback</span>'
-        : '<span class="action-chip" style="background:rgba(46,160,67,0.2);color:#2ea043">model</span>';
-      const rewardColor = s.reward >= 0 ? '#2ea043' : '#da3633';
-
-      return `<div class="log-step">
-        <div class="log-title">
-          <strong>Step ${s.step}</strong>
-          <span class="action-chip">${actionType}</span>
-          ${fallbackTag}
-        </div>
-        <div class="action-meta">
-          <div>${bits.join(' | ') || '—'}</div>
-          <div style="color:${rewardColor}">Reward: ${s.reward >= 0 ? '+' : ''}${s.reward.toFixed(4)}</div>
-        </div>
-        <div class="model-output-box">
-          <span class="model-output-label">Model Output:</span>
-          <code>${s.model_output.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</code>
-        </div>
-      </div>`;
-    }).join('');
-
-    results.classList.remove('hidden');
-    checkLLMStatus();
-
-    setTimeout(() => { prog.classList.add('hidden'); btn.disabled = false; }, 1200);
-  } catch(e) {
-    fill.style.width = '100%';
-    fill.style.background = '#da3633';
-    pText.textContent = 'Error: ' + e.message;
-    btn.disabled = false;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Init
-// ---------------------------------------------------------------------------
 fetchTasks();
-loadGraph();
-checkLLMStatus();
-populateLLMTasks();

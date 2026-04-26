@@ -1,6 +1,6 @@
 name: RecallTraceEnv
 version: 1.0.0
-description: Deterministic OpenEnv environment for supply-chain product recall tracing and precision containment.
+description: Causal inference benchmark — RL agent investigates hidden interventions in partially observable contamination propagation graphs.
 entrypoint:
   module: env.env
   class: RecallTraceEnv
@@ -29,6 +29,8 @@ interfaces:
   actions:
     - inspect_node
     - trace_lot
+    - cross_reference
+    - request_lab_test
     - quarantine
     - notify
     - finalize
@@ -41,6 +43,8 @@ observation_fields:
   - inspected_nodes
   - inspection_results
   - trace_results
+  - cross_reference_results
+  - lab_test_results
   - notified_nodes
   - quarantined_inventory
   - history

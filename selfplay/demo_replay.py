@@ -123,7 +123,7 @@ STATS_BG      = "#1c2128"
 # ---------------------------------------------------------------------------
 
 def _build_graph() -> Tuple[nx.DiGraph, Dict[str, np.ndarray]]:
-    """Build the supply-chain graph and compute a stable layout."""
+    """Build the contamination propagation graph and compute a stable layout."""
     G = nx.DiGraph()
     G.add_nodes_from(NODES)
     G.add_edges_from(EDGES)

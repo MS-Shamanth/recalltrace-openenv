@@ -1,6 +1,6 @@
 """Parametric scenario generator for adversarial self-play.
 
-Generates random supply-chain DAGs and applies adversary-chosen
+Generates random contamination propagation DAGs and applies adversary-chosen
 interventions. Interventions create GENUINE ambiguity — some nodes
 look contaminated but aren't, and some truly contaminated nodes have
 their evidence obscured.
@@ -21,7 +21,7 @@ def _make_node_id(role: str, index: int) -> str:
 
 
 def generate_graph(num_nodes: int = 10, seed: int | None = None) -> Dict[str, Any]:
-    """Create a random supply-chain DAG with inventory at every node.
+    """Create a random contamination propagation DAG with inventory at every node.
 
     Returns a scenario dict compatible with RecallTraceEnv(scenario_data=...).
     Contamination is placed at a single source warehouse by default.
@@ -132,7 +132,7 @@ def generate_graph(num_nodes: int = 10, seed: int | None = None) -> Dict[str, An
         "name": "Adversarial Self-Play Episode",
         "objective": "Find and quarantine contaminated nodes under adversarial intervention.",
         "max_steps": 30,
-        "recall_notice": f"Immediate recall: contaminated {contaminated_lot} detected in the supply chain.",
+        "recall_notice": f"Immediate recall: contaminated {contaminated_lot} detected in the propagation network.",
         "contaminated_lot": contaminated_lot,
         "shipment_graph": shipment_graph,
         "lot_catalog": lot_catalog,
