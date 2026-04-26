@@ -6,10 +6,8 @@ from huggingface_hub import InferenceClient
 
 # Configuration
 SPACE_URL = "https://ms-shamanth-recalltrace-openenv.hf.space"
+# Local Model Configuration
 MODEL_ID = "ms-shamanth/recalltrace-investigator"
-
-# Get HF token from environment (required for Inference API)
-HF_TOKEN = os.environ.get("HF_TOKEN")
 
 def get_system_prompt():
     return """You are a supply-chain investigator AI.
@@ -32,11 +30,9 @@ def format_observation(obs: dict) -> str:
     """Format the environment state into a text prompt."""
     prompt = "CURRENT OBSERVATION:\n"
     
-    # Format Budget
     budget = obs.get("budget", {})
     prompt += f"Steps Remaining: {budget.get('steps_remaining', '?')}\n\n"
     
-    # Format State (what the agent knows)
     state = obs.get("state", {})
     prompt += "KNOWLEDGE BASE:\n"
     
@@ -53,7 +49,6 @@ def format_observation(obs: dict) -> str:
             if ndata.get("quarantined_inventory"):
                 prompt += f"  Status: QUARANTINED\n"
                 
-    # Format previous feedback if any
     if obs.get("feedback"):
         prompt += f"\nPREVIOUS ACTION FEEDBACK:\n{obs['feedback']}\n"
         
@@ -61,15 +56,27 @@ def format_observation(obs: dict) -> str:
     return prompt
 
 def run_loop():
-    print(f"--- Starting Live HF Inference Loop ---")
+    print(f"--- Starting Live Inference Loop ---")
     print(f"Environment: {SPACE_URL}")
-    print(f"Model: {MODEL_ID}")
+    print(f"Model: {MODEL_ID} (Running locally via Unsloth)")
     
-    if not HF_TOKEN:
-        print("WARNING: HF_TOKEN environment variable is not set. Inference API may rate-limit or reject the request.")
-    
-    # 1. Initialize Model Client
-    client = InferenceClient(model=MODEL_ID, token=HF_TOKEN)
+    # 1. Initialize Local Model via Unsloth
+    print("\nLoading local model into GPU memory...")
+    try:
+        from unsloth import FastLanguageModel
+        model, tokenizer = FastLanguageModel.from_pretrained(
+            model_name=MODEL_ID,
+            max_seq_length=2048,
+            load_in_4bit=True,
+        )
+        FastLanguageModel.for_inference(model)
+        print("Model loaded successfully!")
+    except ImportError:
+        print("Error: 'unsloth' is not installed. Please run this script in the environment where you trained the model.")
+        return
+    except Exception as e:
+        print(f"Failed to load model: {e}")
+        return
     
     # 2. Reset Environment
     print("\n[1] Resetting remote environment...")
@@ -95,23 +102,22 @@ def run_loop():
         step_count += 1
         print(f"\n--- Step {step_count} ---")
         
-        # Prepare prompt
         obs_text = format_observation(obs)
         messages.append({"role": "user", "content": obs_text})
         
-        # Query Model
-        print("Querying Hugging Face Inference API...")
+        print("Running local GPU inference...")
         try:
-            # We use text-generation since it's an instruct model
-            response = client.chat_completion(
-                messages=messages,
-                max_tokens=150,
-                temperature=0.1,
-                top_p=0.9
-            )
-            raw_action = response.choices[0].message.content.strip()
+            # Format using tokenizer chat template
+            inputs = tokenizer.apply_chat_template(
+                messages,
+                tokenize=True,
+                add_generation_prompt=True,
+                return_tensors="pt"
+            ).to("cuda")
             
-            # Clean up markdown if the model accidentally included it
+            outputs = model.generate(input_ids=inputs, max_new_tokens=150, use_cache=True, temperature=0.1)
+            raw_action = tokenizer.decode(outputs[0][inputs.shape[1]:], skip_special_tokens=True).strip()
+            
             if raw_action.startswith("```json"):
                 raw_action = raw_action[7:-3].strip()
             elif raw_action.startswith("```"):
