@@ -156,6 +156,14 @@ function drawGraph(nodes, edges, highlights) {
 
 async function loadGraph() {
   try {
+    const nodesSlider = document.getElementById('nodes-slider');
+    let numNodes = 10;
+    if (nodesSlider) {
+      numNodes = parseInt(nodesSlider.value) || 10;
+    }
+    // Sync backend state with the slider before drawing
+    await fetch('/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ num_nodes: numNodes }) });
+    
     const res = await fetch('/api/graph/structure');
     graphData = await res.json();
     drawGraph(graphData.nodes, graphData.edges, {});
@@ -213,6 +221,9 @@ async function runSelfPlay() {
     fill.style.width = '80%'; pText.textContent = 'Processing results...';
     const data = await res.json();
     trainingData = data;
+    if (data.graph) {
+      graphData = data.graph;
+    }
     fill.style.width = '100%'; pText.textContent = 'Done!';
     document.getElementById('sim-status-badge').textContent = 'Trained ✓';
 

@@ -203,10 +203,17 @@ def selfplay_run(request: SelfPlayRequest) -> dict:
             "adversary_strategy": trainer.adversary.get_strategy_summary(),
         }
 
+        # Generate a final graph matching the requested nodes to display the result
+        global ACTIVE_ENV
+        from selfplay.scenario_gen import generate_graph
+        ACTIVE_ENV = RecallTraceEnv(scenario_data=generate_graph(num_nodes=request.num_nodes))
+        ACTIVE_ENV.reset()
+
         return {
             "num_episodes": request.num_episodes,
             "summary": summary,
             "episodes": stats,
+            "graph": graph_structure(),
         }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
