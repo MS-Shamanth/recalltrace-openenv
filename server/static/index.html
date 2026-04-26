@@ -85,7 +85,7 @@
     <!-- ===== TAB NAV ===== -->
     <nav class="tab-nav" id="tab-nav">
       <button class="tab-btn active" data-tab="simulation" onclick="switchTab('simulation')">
-        <span class="tab-icon">🧠</span> Simulation
+        <span class="tab-icon">🧠</span> Adversarial Engine
       </button>
       <button class="tab-btn" data-tab="llmagent" onclick="switchTab('llmagent')">
         <span class="tab-icon">🤖</span> LLM Agent
@@ -96,15 +96,12 @@
       <button class="tab-btn" data-tab="openenv" onclick="switchTab('openenv')">
         <span class="tab-icon">⚡</span> OpenEnv Runner
       </button>
-      <button class="tab-btn" data-tab="manual" onclick="switchTab('manual')">
-        <span class="tab-icon">🕹️</span> Manual Mode
-      </button>
       <button class="tab-btn" data-tab="about" onclick="switchTab('about')">
         <span class="tab-icon">📖</span> About
       </button>
     </nav>
 
-    <!-- ===== SIMULATION TAB ===== -->
+    <!-- ===== ADVERSARIAL ENGINE TAB ===== -->
     <section class="tab-content active" id="tab-simulation">
       <div class="sim-grid">
         <!-- Left: Graph Visualization -->
@@ -448,72 +445,7 @@
       </div>
     </section>
 
-    <!-- ===== MANUAL MODE TAB ===== -->
-    <section class="tab-content" id="tab-manual">
-      <div class="sim-grid">
-        <!-- Left: Controls & Logs -->
-        <div class="panel glass-panel">
-          <div class="panel-header">
-            <h2>Investigation Controls</h2>
-            <button class="action-btn" onclick="initManualMode()">Reset Environment</button>
-          </div>
-          <div class="manual-controls">
-            <div class="input-group">
-              <label>Graph Nodes (<span id="manual-nodes-val">10</span>)</label>
-              <input type="range" id="manual-nodes-slider" min="6" max="30" value="10" step="2" class="range-input" oninput="document.getElementById('manual-nodes-val').textContent = this.value">
-            </div>
-            <div class="input-group">
-              <label>Action</label>
-              <select id="manual-action" onchange="updateManualTargets()">
-                <option value="inspect_node">Inspect Node</option>
-                <option value="trace_lot">Trace Lot</option>
-                <option value="quarantine">Quarantine Node</option>
-                <option value="notify">Notify Node</option>
-                <option value="finalize">Finalize Investigation</option>
-              </select>
-            </div>
-            <div class="input-group">
-              <label>Target</label>
-              <select id="manual-target">
-                <!-- Populated dynamically -->
-              </select>
-            </div>
-            <button class="action-btn" onclick="executeManualAction()">Execute Action</button>
-          </div>
-          <div class="panel-header" style="margin-top: 1.5rem;">
-            <h2>Live Log</h2>
-          </div>
-          <div id="manual-log" class="action-log">
-            <div class="log-item">Click "Reset Environment" to start.</div>
-          </div>
-        </div>
 
-        <!-- Right: Real-time Graph -->
-        <div class="panel glass-panel">
-          <div class="panel-header">
-            <h2>Real-Time Supply Chain</h2>
-            <div class="panel-badge" id="manual-status-badge">Ready</div>
-          </div>
-          <div class="graph-container">
-            <svg id="manual-graph-svg" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid meet">
-              <defs>
-                <!-- Reuse filters and markers from Simulation Tab -->
-              </defs>
-              <g id="manual-graph-edges"></g>
-              <g id="manual-graph-nodes"></g>
-              <g id="manual-graph-labels"></g>
-              <g id="manual-graph-overlays"></g>
-            </svg>
-            <div class="graph-legend">
-              <div class="legend-item"><span class="legend-dot" style="background:#21262d;border:2px solid #444c56"></span> Unvisited</div>
-              <div class="legend-item"><span class="legend-dot" style="background:#2d2a1a;border:2px solid #f0c040"></span> Visited</div>
-              <div class="legend-item"><span class="legend-dot" style="background:#1a3a2a;border:2px solid #2ea043"></span> Safe</div>
-              <div class="legend-item"><span class="legend-dot" style="background:#da3633;border:2px solid #ff6b6b"></span> Quarantined</div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
 
     <!-- ===== ABOUT TAB ===== -->
     <section class="tab-content" id="tab-about">
