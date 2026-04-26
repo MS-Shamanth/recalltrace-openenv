@@ -293,18 +293,25 @@ def _load_llm():
     if not torch.cuda.is_available():
         raise RuntimeError("No GPU available — LLM inference requires CUDA")
 
-    from peft import AutoPeftModelForCausalLM
-    from transformers import AutoTokenizer
+    from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+    from peft import PeftModel
 
-    print(f"  Loading trained model from {LLM_HUB_MODEL}...")
+    print(f"  Loading tokenizer from {LLM_HUB_MODEL}...")
     _llm_tokenizer = AutoTokenizer.from_pretrained(LLM_HUB_MODEL)
-    _llm_model = AutoPeftModelForCausalLM.from_pretrained(
-        LLM_HUB_MODEL,
+    
+    print(f"  Loading 4-bit base model {LLM_BASE_MODEL}...")
+    quant_config = BitsAndBytesConfig(load_in_4bit=True)
+    base_model = AutoModelForCausalLM.from_pretrained(
+        LLM_BASE_MODEL,
         torch_dtype=torch.float16,
         device_map="auto",
-        load_in_4bit=True,
+        quantization_config=quant_config,
     )
+    
+    print(f"  Applying LoRA adapters from {LLM_HUB_MODEL}...")
+    _llm_model = PeftModel.from_pretrained(base_model, LLM_HUB_MODEL)
     _llm_model.eval()
+    
     print(f"  ✅ Model loaded successfully on {_llm_model.device}")
     return _llm_model, _llm_tokenizer
 
