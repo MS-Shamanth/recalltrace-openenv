@@ -658,8 +658,19 @@ def upload_dataset(request: DatasetUploadRequest = Body(...)) -> dict:
             rng = random.Random(idx * 123 + 7)
             chosen_type = rng.choice(itypes)
             chosen_region = rng.choice(gregions)
-            scenario, target_node, num_hops = apply_intervention(
-                graph, chosen_type, chosen_region, rng=rng
+            # Resolve a target node in the requested region
+            region_nodes = [
+                n for n, r in graph.get("_node_regions", {}).items() if r == chosen_region
+            ]
+            if not region_nodes:
+                region_nodes = list(graph["nodes"].keys())
+            target_node = rng.choice(region_nodes)
+            
+            from selfplay.adversary import DEFAULT_HOPS
+            num_hops = DEFAULT_HOPS.get(chosen_type, 1) + rng.randint(0, 1)
+
+            scenario = apply_intervention(
+                graph, chosen_type, target_node, num_hops, rng=rng
             )
 
             env = RecallTraceEnv(scenario_data=scenario)
