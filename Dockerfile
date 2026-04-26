@@ -15,7 +15,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     HF_HOME=/tmp/hf_cache
 
 COPY requirements.txt ./
-RUN pip install --no-cache-dir --break-system-packages -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
