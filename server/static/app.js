@@ -469,6 +469,21 @@ async function runAllTasks() {
     document.getElementById('all-results').innerHTML = data.episodes.map(ep=>
       `<div class="log-step"><strong>${ep.task.name}</strong><div>Score: ${ep.score.toFixed(4)} | Steps: ${ep.steps_taken} | ${ep.success?'Success':'Needs work'}</div></div>`
     ).join('');
+    
+    // Also populate the visual panels using the last task's trajectory so the UI isn't empty!
+    if (data.episodes && data.episodes.length > 0) {
+      const lastEp = data.episodes[data.episodes.length - 1];
+      document.getElementById('current-score').textContent = lastEp.score.toFixed(4);
+      document.getElementById('current-steps').textContent = lastEp.steps_taken;
+      document.getElementById('current-status').textContent = lastEp.success ? 'Contained' : 'Needs work';
+      renderOERewardChart(lastEp.logs);
+      renderOEFinalSummary(lastEp);
+      renderOELog(lastEp);
+      
+      // Add a note to the log to clarify these are the logs for the last task
+      const logArea = document.getElementById('oe-episode-log');
+      logArea.insertAdjacentHTML('afterbegin', `<div class="log-step" style="background:rgba(88,166,255,0.1); border-left:3px solid #58a6ff;"><strong>Note:</strong> Showing trajectory for the last evaluated task: ${lastEp.task.name}</div>`);
+    }
   } catch (err) {
     alert("Error: " + err.message);
   } finally {
