@@ -124,8 +124,13 @@ def run_loop():
             
         except Exception as e:
             print(f"Model Inference Failed: {e}")
-            print("Fallback to safe action: inspect_node on random node")
-            action_dict = {"type": "inspect_node", "node_id": "W1"}
+            print("Fallback to safe action: inspect_node on first available node")
+            fallback_node = "W1"
+            if obs.get("inventory"):
+                fallback_node = list(obs["inventory"].keys())[0]
+            elif obs.get("belief_state"):
+                fallback_node = list(obs["belief_state"].keys())[0]
+            action_dict = {"type": "inspect_node", "node_id": fallback_node}
             
         # Step Environment
         print("Sending action to remote Space...")
@@ -143,7 +148,10 @@ def run_loop():
             print(f"Reward: {reward:.4f} | Done: {done}")
             
         except Exception as e:
-            print(f"Failed to step environment: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"Failed to step environment: {e} - {e.response.text}")
+            else:
+                print(f"Failed to step environment: {e}")
             break
 
     print("\n--- Episode Complete ---")
