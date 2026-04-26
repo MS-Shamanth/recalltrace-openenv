@@ -213,13 +213,18 @@ def selfplay_run(request: SelfPlayRequest) -> dict:
 
 
 @app.get("/api/selfplay/demo")
-def selfplay_demo() -> dict:
+def selfplay_demo(num_nodes: int = 10) -> dict:
     """Return pre-computed before/after episode data for instant demo.
 
     Runs a quick 200-episode training and returns early vs late comparison.
     """
     try:
-        trainer = SelfPlayTrainer(num_nodes=10)
+        global ACTIVE_ENV
+        from selfplay.scenario_gen import generate_graph
+        ACTIVE_ENV = RecallTraceEnv(scenario_data=generate_graph(num_nodes=num_nodes))
+        ACTIVE_ENV.reset()
+        
+        trainer = SelfPlayTrainer(num_nodes=num_nodes)
         stats = trainer.train(num_episodes=200)
 
         early_candidates = stats[:30]

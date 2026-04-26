@@ -291,8 +291,9 @@ function showComparison(episodes) {
 async function runReplay() {
   const btn = document.getElementById('btn-replay');
   btn.disabled = true;
+  const numNodes = parseInt(document.getElementById('nodes-slider').value) || 10;
   try {
-    const res = await fetch('/api/selfplay/demo');
+    const res = await fetch(`/api/selfplay/demo?num_nodes=${numNodes}`);
     const data = await res.json();
     trainingData = {episodes: data.all_stats, summary:{}};
     graphData = data.graph;
@@ -826,8 +827,24 @@ function drawManualGraph(nodes, edges, state) {
 }
 
 // ---------------------------------------------------------------------------
-// Init
+// Init & Real-time Listeners
 // ---------------------------------------------------------------------------
+
+// Make graph reactive to node slider changes immediately
+document.getElementById('nodes-slider').addEventListener('change', async (e) => {
+  const numNodes = parseInt(e.target.value);
+  try {
+    await fetch('/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ num_nodes: numNodes }) });
+    loadGraph();
+  } catch (err) {
+    console.warn("Failed to update graph on slider change", err);
+  }
+});
+
+// Update the label dynamically
+document.getElementById('nodes-slider').addEventListener('input', (e) => {
+  document.getElementById('nodes-value').textContent = e.target.value;
+});
 fetchTasks();
 loadGraph();
 checkLLMStatus();
