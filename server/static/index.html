@@ -12,7 +12,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
     rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=15">
+  <link rel="stylesheet" href="/static/styles.css?v=16">
 </head>
 
 <body>
@@ -286,7 +286,10 @@
             <button class="btn btn-secondary" id="btn-llm-dataset" onclick="document.getElementById('dataset-file-input').click()">
               <span class="btn-icon">📂</span> Upload Dataset
             </button>
-            <input type="file" id="dataset-file-input" accept=".json,.csv" style="display:none" onchange="handleDatasetUpload(event)">
+            <button class="btn btn-secondary" id="btn-llm-build-ds" onclick="openDatasetBuilder()">
+              <span class="btn-icon">🔧</span> Build Dataset
+            </button>
+            <input type="file" id="dataset-file-input" accept=".json" style="display:none" onchange="handleDatasetUpload(event)">
           </div>
           <div class="progress-container hidden" id="llm-progress">
             <div class="progress-bar">
@@ -823,7 +826,7 @@ Training: REINFORCE + learned baseline + entropy regularization
     </footer>
   </div>
 
-  <script src="/static/app.js?v=15"></script>
+  <script src="/static/app.js?v=16"></script>
 </body>
 
 </html>

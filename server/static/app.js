@@ -979,14 +979,23 @@ async function handleDatasetUpload(event) {
     try {
       json = JSON.parse(text);
     } catch(e) {
-      alert("Invalid JSON file");
+      alert("Invalid JSON file. Please upload a valid JSON dataset.");
       return;
     }
     
+    // Determine dataset type from file or default
+    const datasetType = json.dataset_type || 'evaluation';
+    
     const req = {
-      dataset_name: file.name,
+      dataset_name: json.dataset_name || file.name.replace(/\.json$/i, ''),
+      dataset_type: datasetType,
       scenarios: Array.isArray(json) ? json : (json.scenarios || [])
     };
+    
+    if (req.scenarios.length === 0) {
+      alert("No scenarios found in the dataset file. Expected a JSON with a 'scenarios' array containing objects with node_count, contamination_type, graph_region, and description.");
+      return;
+    }
     
     const res = await fetch('/api/llm/upload_dataset', {
       method: 'POST',
@@ -994,26 +1003,13 @@ async function handleDatasetUpload(event) {
       body: JSON.stringify(req)
     });
     
-    if (!res.ok) throw new Error("Dataset evaluation failed");
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || `Server error (${res.status})`);
+    }
     
     const data = await res.json();
-    
-    document.getElementById('ds-name').textContent = data.dataset_name;
-    document.getElementById('ds-count').textContent = data.num_scenarios;
-    document.getElementById('ds-f1').textContent = data.average_f1.toFixed(3);
-    document.getElementById('ds-reward').textContent = data.average_reward.toFixed(3);
-    
-    listEl.innerHTML = data.results.map(r => `
-      <div class="log-step">
-        <div class="log-title"><strong>${r.description}</strong><span class="action-chip">${r.intervention_type.replace(/_/g,' ')}</span></div>
-        <div class="action-meta">
-          <div>F1: ${r.f1.toFixed(3)} | Reward: ${r.reward.toFixed(3)} | Steps: ${r.steps} | Quarantined: ${r.nodes_quarantined}</div>
-        </div>
-      </div>
-    `).join('');
-    
-    resultsDiv.classList.remove('hidden');
-    document.getElementById('llm-results').classList.add('hidden');
+    renderDatasetResults(data);
     
   } catch(e) {
     alert("Error: " + e.message);
@@ -1027,18 +1023,18 @@ async function handleDatasetUpload(event) {
 async function runDefaultDataset() {
   const resultsDiv = document.getElementById('dataset-results');
   const btn = document.getElementById('btn-llm-default-ds');
-  const listEl = document.getElementById('ds-scenario-list');
   
   btn.disabled = true;
   btn.innerHTML = '<span class="btn-icon">⏳</span> Running fretfch...';
   
   try {
     const fetchRes = await fetch('/static/fretfch.json');
-    if (!fetchRes.ok) throw new Error("Could not load default dataset");
+    if (!fetchRes.ok) throw new Error("Could not load default dataset file");
     const json = await fetchRes.json();
     
     const req = {
-      dataset_name: "fretfch.json",
+      dataset_name: json.dataset_name || "fretfch",
+      dataset_type: json.dataset_type || "evaluation",
       scenarios: Array.isArray(json) ? json : (json.scenarios || [])
     };
     
@@ -1048,26 +1044,13 @@ async function runDefaultDataset() {
       body: JSON.stringify(req)
     });
     
-    if (!res.ok) throw new Error("Dataset evaluation failed");
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || `Server error (${res.status})`);
+    }
     
     const data = await res.json();
-    
-    document.getElementById('ds-name').textContent = data.dataset_name;
-    document.getElementById('ds-count').textContent = data.num_scenarios;
-    document.getElementById('ds-f1').textContent = data.average_f1.toFixed(3);
-    document.getElementById('ds-reward').textContent = data.average_reward.toFixed(3);
-    
-    listEl.innerHTML = data.results.map(r => `
-      <div class="log-step">
-        <div class="log-title"><strong>${r.description}</strong><span class="action-chip">${r.intervention_type.replace(/_/g,' ')}</span></div>
-        <div class="action-meta">
-          <div>F1: ${r.f1.toFixed(3)} | Reward: ${r.reward.toFixed(3)} | Steps: ${r.steps} | Quarantined: ${r.nodes_quarantined}</div>
-        </div>
-      </div>
-    `).join('');
-    
-    resultsDiv.classList.remove('hidden');
-    document.getElementById('llm-results').classList.add('hidden');
+    renderDatasetResults(data);
     
   } catch(e) {
     alert("Error: " + e.message);
@@ -1076,3 +1059,205 @@ async function runDefaultDataset() {
     btn.innerHTML = '<span class="btn-icon">⚡</span> Run using fretfch dataset';
   }
 }
+
+function renderDatasetResults(data) {
+  const resultsDiv = document.getElementById('dataset-results');
+  const listEl = document.getElementById('ds-scenario-list');
+  
+  document.getElementById('ds-name').textContent = data.dataset_name;
+  document.getElementById('ds-count').textContent = data.num_scenarios;
+  document.getElementById('ds-f1').textContent = data.average_f1.toFixed(3);
+  document.getElementById('ds-reward').textContent = data.average_reward.toFixed(3);
+  
+  // Update the badge with dataset type
+  const badge = document.getElementById('dataset-name-badge');
+  if (badge) {
+    badge.textContent = (data.dataset_type || 'evaluation').toUpperCase();
+  }
+  
+  listEl.innerHTML = data.results.map(r => `
+    <div class="log-step">
+      <div class="log-title">
+        <strong>${r.description}</strong>
+        <span class="action-chip">${(r.intervention_type || '').replace(/_/g,' ')}</span>
+        <span class="action-chip" style="background:rgba(88,166,255,0.15);color:#58a6ff">${(r.graph_region || '').replace(/_/g,' ')}</span>
+      </div>
+      <div class="action-meta">
+        <div>F1: ${r.f1.toFixed(3)} | Reward: ${r.reward.toFixed(3)} | Steps: ${r.steps} | Quarantined: ${r.nodes_quarantined}</div>
+      </div>
+    </div>
+  `).join('');
+  
+  resultsDiv.classList.remove('hidden');
+  document.getElementById('llm-results').classList.add('hidden');
+}
+
+// ---------------------------------------------------------------------------
+// Dataset Builder — Create Custom Datasets in the UI
+// ---------------------------------------------------------------------------
+
+function openDatasetBuilder() {
+  let modal = document.getElementById('dataset-builder-modal');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'dataset-builder-modal';
+    modal.className = 'ds-modal-overlay';
+    modal.innerHTML = `
+      <div class="ds-modal">
+        <div class="ds-modal-header">
+          <h2>📦 Build Custom Dataset</h2>
+          <button class="ds-modal-close" onclick="closeDatasetBuilder()">✕</button>
+        </div>
+        <div class="ds-modal-body">
+          <div class="ds-form-row">
+            <label>Dataset Name</label>
+            <input type="text" id="ds-builder-name" value="my_dataset" class="ds-input" placeholder="my_custom_dataset">
+          </div>
+          <div class="ds-form-row">
+            <label>Dataset Type</label>
+            <select id="ds-builder-type" class="ds-input">
+              <option value="evaluation">🧪 Evaluation — Test agent performance</option>
+              <option value="training">🏋️ Training — Generate training data</option>
+              <option value="benchmark">📊 Benchmark — Standardized comparison</option>
+              <option value="stress_test">🔥 Stress Test — Edge cases & limits</option>
+            </select>
+          </div>
+          <div class="ds-scenarios-header">
+            <h3>Scenarios</h3>
+            <button class="btn btn-secondary btn-sm" onclick="addBuilderScenario()">+ Add Scenario</button>
+          </div>
+          <div id="ds-builder-scenarios" class="ds-scenarios-list"></div>
+          <div class="ds-form-row" style="margin-top:16px;">
+            <button class="btn btn-primary btn-glow" onclick="runBuiltDataset()" id="btn-run-built">
+              <span class="btn-icon">▶</span> Run Dataset
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+    // Add default scenarios
+    addBuilderScenario();
+    addBuilderScenario();
+  }
+  modal.classList.add('active');
+}
+
+function closeDatasetBuilder() {
+  const modal = document.getElementById('dataset-builder-modal');
+  if (modal) modal.classList.remove('active');
+}
+
+let _builderScenarioCount = 0;
+
+function addBuilderScenario() {
+  const container = document.getElementById('ds-builder-scenarios');
+  if (!container) return;
+  _builderScenarioCount++;
+  const idx = _builderScenarioCount;
+  
+  const div = document.createElement('div');
+  div.className = 'ds-scenario-card';
+  div.id = `ds-scenario-${idx}`;
+  div.innerHTML = `
+    <div class="ds-scenario-header">
+      <span class="ds-scenario-num">#${idx}</span>
+      <button class="ds-scenario-remove" onclick="removeBuilderScenario(${idx})">✕</button>
+    </div>
+    <div class="ds-scenario-fields">
+      <div class="ds-field">
+        <label>Nodes</label>
+        <input type="number" min="6" max="20" value="10" class="ds-input ds-input-sm" data-field="node_count">
+      </div>
+      <div class="ds-field">
+        <label>Contamination Type</label>
+        <select class="ds-input ds-input-sm" data-field="contamination_type">
+          <option value="">🎲 Random</option>
+          <option value="lot_relabel">🏷️ Lot Relabel</option>
+          <option value="mixing_event">🔀 Mixing Event</option>
+          <option value="record_deletion">🗑️ Record Deletion</option>
+        </select>
+      </div>
+      <div class="ds-field">
+        <label>Graph Region</label>
+        <select class="ds-input ds-input-sm" data-field="graph_region">
+          <option value="">🎲 Random</option>
+          <option value="source">🏭 Source (Warehouse)</option>
+          <option value="midstream">📦 Midstream (Crossdock)</option>
+          <option value="downstream">🏪 Downstream (Store)</option>
+        </select>
+      </div>
+      <div class="ds-field ds-field-wide">
+        <label>Description</label>
+        <input type="text" class="ds-input ds-input-sm" data-field="description" placeholder="Scenario description..." value="Scenario ${idx}">
+      </div>
+    </div>
+  `;
+  container.appendChild(div);
+}
+
+function removeBuilderScenario(idx) {
+  const el = document.getElementById(`ds-scenario-${idx}`);
+  if (el) el.remove();
+}
+
+async function runBuiltDataset() {
+  const btn = document.getElementById('btn-run-built');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="btn-icon">⏳</span> Running...';
+  
+  const name = document.getElementById('ds-builder-name').value || 'custom_dataset';
+  const dsType = document.getElementById('ds-builder-type').value || 'evaluation';
+  
+  const scenarioCards = document.querySelectorAll('.ds-scenario-card');
+  const scenarios = [];
+  
+  scenarioCards.forEach(card => {
+    const nodeCountEl = card.querySelector('[data-field="node_count"]');
+    const typeEl = card.querySelector('[data-field="contamination_type"]');
+    const regionEl = card.querySelector('[data-field="graph_region"]');
+    const descEl = card.querySelector('[data-field="description"]');
+    
+    scenarios.push({
+      node_count: parseInt(nodeCountEl?.value) || 10,
+      contamination_type: typeEl?.value || null,
+      graph_region: regionEl?.value || null,
+      description: descEl?.value || ''
+    });
+  });
+  
+  if (scenarios.length === 0) {
+    alert("Add at least one scenario before running.");
+    btn.disabled = false;
+    btn.innerHTML = '<span class="btn-icon">▶</span> Run Dataset';
+    return;
+  }
+  
+  try {
+    const res = await fetch('/api/llm/upload_dataset', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        dataset_name: name,
+        dataset_type: dsType,
+        scenarios: scenarios
+      })
+    });
+    
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || `Server error (${res.status})`);
+    }
+    
+    const data = await res.json();
+    closeDatasetBuilder();
+    renderDatasetResults(data);
+    
+  } catch(e) {
+    alert("Error: " + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<span class="btn-icon">▶</span> Run Dataset';
+  }
+}
+

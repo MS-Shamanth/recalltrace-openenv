@@ -21,7 +21,7 @@ from env.env import RecallTraceEnv
 from env.models import RecallAction
 from selfplay.trainer import SelfPlayTrainer
 from selfplay.scenario_gen import generate_graph, apply_intervention, compute_f1
-from selfplay.adversary import AdversaryAgent, INTERVENTION_TYPES, GRAPH_REGIONS
+from selfplay.adversary import AdversaryAgent, INTERVENTION_TYPES, GRAPH_REGIONS, DEFAULT_HOPS
 from selfplay.investigator import InvestigatorAgent
 
 
@@ -617,6 +617,49 @@ def rl_training_run(request: SelfPlayRequest = Body(default=SelfPlayRequest())) 
 # Dataset Upload & LLM Evaluation Endpoint
 # ---------------------------------------------------------------------------
 
+# Region aliases for user-friendly input normalization
+_REGION_ALIASES = {
+    "upstream": "source",
+    "origin": "source",
+    "warehouse": "source",
+    "middle": "midstream",
+    "mid": "midstream",
+    "crossdock": "midstream",
+    "store": "downstream",
+    "retail": "downstream",
+    "end": "downstream",
+}
+
+
+def _normalize_region(region: str | None) -> str | None:
+    """Normalize user-provided region names to internal GRAPH_REGIONS values."""
+    if not region:
+        return None
+    r = region.strip().lower()
+    if r in GRAPH_REGIONS:
+        return r
+    return _REGION_ALIASES.get(r)
+
+
+def _normalize_intervention(intervention: str | None) -> str | None:
+    """Normalize user-provided intervention types to valid INTERVENTION_TYPES."""
+    if not intervention:
+        return None
+    t = intervention.strip().lower()
+    if t in INTERVENTION_TYPES:
+        return t
+    # Common aliases
+    aliases = {
+        "source_contamination": "record_deletion",
+        "relabel": "lot_relabel",
+        "mixing": "mixing_event",
+        "mix": "mixing_event",
+        "deletion": "record_deletion",
+        "delete": "record_deletion",
+    }
+    return aliases.get(t)
+
+
 class DatasetScenario(BaseModel):
     """A single scenario from a user-uploaded dataset."""
     node_count: int = 10
@@ -627,6 +670,7 @@ class DatasetScenario(BaseModel):
 class DatasetUploadRequest(BaseModel):
     """User-uploaded dataset for LLM agent evaluation."""
     dataset_name: str = "custom_dataset"
+    dataset_type: Optional[str] = "evaluation"
     scenarios: List[DatasetScenario] = []
 
 @app.post("/api/llm/upload_dataset")
@@ -634,6 +678,17 @@ def upload_dataset(request: DatasetUploadRequest = Body(...)) -> dict:
     """Accept a user-uploaded dataset and run the heuristic agent on each scenario.
     Returns per-scenario scores and aggregated metrics."""
     try:
+        if not request.scenarios:
+            return {
+                "dataset_name": request.dataset_name,
+                "dataset_type": request.dataset_type or "evaluation",
+                "num_scenarios": 0,
+                "average_f1": 0.0,
+                "average_reward": 0.0,
+                "results": [],
+                "message": "No scenarios provided in the dataset.",
+            }
+
         results = []
         total_f1 = 0.0
         total_reward = 0.0
@@ -642,22 +697,24 @@ def upload_dataset(request: DatasetUploadRequest = Body(...)) -> dict:
             num_nodes = max(6, min(20, scenario_def.node_count))
             graph = generate_graph(num_nodes=num_nodes)
 
-            # Apply specified intervention or random
-            intervention = scenario_def.contamination_type
-            if intervention and intervention in INTERVENTION_TYPES:
-                itypes = [intervention]
+            # Normalize and apply specified intervention or random
+            normalized_type = _normalize_intervention(scenario_def.contamination_type)
+            if normalized_type:
+                itypes = [normalized_type]
             else:
                 itypes = INTERVENTION_TYPES
 
-            region = scenario_def.graph_region
-            if region and region in GRAPH_REGIONS:
-                gregions = [region]
+            # Normalize region
+            normalized_region = _normalize_region(scenario_def.graph_region)
+            if normalized_region:
+                gregions = [normalized_region]
             else:
                 gregions = GRAPH_REGIONS
 
             rng = random.Random(idx * 123 + 7)
             chosen_type = rng.choice(itypes)
             chosen_region = rng.choice(gregions)
+
             # Resolve a target node in the requested region
             region_nodes = [
                 n for n, r in graph.get("_node_regions", {}).items() if r == chosen_region
@@ -665,8 +722,7 @@ def upload_dataset(request: DatasetUploadRequest = Body(...)) -> dict:
             if not region_nodes:
                 region_nodes = list(graph["nodes"].keys())
             target_node = rng.choice(region_nodes)
-            
-            from selfplay.adversary import DEFAULT_HOPS
+
             num_hops = DEFAULT_HOPS.get(chosen_type, 1) + rng.randint(0, 1)
 
             scenario = apply_intervention(
@@ -678,11 +734,14 @@ def upload_dataset(request: DatasetUploadRequest = Body(...)) -> dict:
 
             total_ep_reward = 0.0
             steps = 0
-            while not env.done and steps < scenario.get("max_steps", 20):
+            max_steps = scenario.get("max_steps", 20)
+            while not env.done and steps < max_steps:
                 action = choose_heuristic_action(obs)
                 obs, reward, done, info = env.step(action)
                 total_ep_reward += reward
                 steps += 1
+                if done:
+                    break
 
             quarantined = [
                 nid for nid, nd in env.state_data.get("nodes", {}).items()
@@ -695,7 +754,9 @@ def upload_dataset(request: DatasetUploadRequest = Body(...)) -> dict:
             results.append({
                 "scenario_index": idx + 1,
                 "description": scenario_def.description or f"Scenario {idx + 1}",
+                "contamination_type_requested": scenario_def.contamination_type or "random",
                 "intervention_type": chosen_type,
+                "graph_region_requested": scenario_def.graph_region or "random",
                 "graph_region": chosen_region,
                 "f1": round(f1, 4),
                 "reward": round(total_ep_reward, 4),
@@ -707,12 +768,15 @@ def upload_dataset(request: DatasetUploadRequest = Body(...)) -> dict:
         count = max(len(results), 1)
         return {
             "dataset_name": request.dataset_name,
+            "dataset_type": request.dataset_type or "evaluation",
             "num_scenarios": len(results),
             "average_f1": round(total_f1 / count, 4),
             "average_reward": round(total_reward / count, 4),
             "results": results,
         }
     except Exception as exc:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
