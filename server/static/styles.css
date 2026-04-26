@@ -361,6 +361,40 @@ select option { background: #0d1525; }
 .link-icon { font-size: 1.4rem; }
 .link-card span:last-child { font-size: 0.85rem; }
 
+/* ===== LLM AGENT TAB ===== */
+.llm-hero { margin-bottom: 20px; }
+.llm-desc {
+  color: var(--muted); font-size: 0.92rem; line-height: 1.7;
+  margin: 12px 0 20px; max-width: 700px;
+}
+.llm-desc a { color: var(--accent); text-decoration: none; }
+.llm-desc a:hover { text-decoration: underline; }
+.llm-controls {
+  display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+}
+.llm-select {
+  padding: 10px 16px; border-radius: 12px;
+  background: rgba(255,255,255,0.06); border: 1px solid var(--panel-border);
+  color: var(--text); font-family: var(--font); font-size: 0.9rem;
+  outline: none; min-width: 200px; cursor: pointer;
+}
+.llm-select:focus { border-color: var(--accent); }
+.llm-results { display: grid; gap: 20px; }
+.model-output-box {
+  margin-top: 8px; padding: 10px 14px; border-radius: 10px;
+  background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.06);
+  font-family: var(--mono); font-size: 0.78rem; color: #a8b2c1;
+  word-break: break-all; line-height: 1.5;
+}
+.model-output-label {
+  display: block; font-size: 0.7rem; color: var(--muted);
+  font-family: var(--font); font-weight: 600; margin-bottom: 4px;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.model-output-box code {
+  display: block; white-space: pre-wrap; color: #c9d1d9;
+}
+
 /* ===== FOOTER ===== */
 .footer { text-align: center; padding: 32px 0 0; color: var(--muted); font-size: 0.85rem; }
 .footer-sub { font-size: 0.78rem; margin-top: 4px; opacity: 0.6; }

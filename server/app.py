@@ -266,6 +266,161 @@ def _get_demo_graph() -> dict:
 
 
 # ---------------------------------------------------------------------------
+# LLM Agent Inference (GPU-powered live demo)
+# ---------------------------------------------------------------------------
+
+_llm_model = None
+_llm_tokenizer = None
+
+LLM_HUB_MODEL = "ms-shamanth/recalltrace-investigator"
+LLM_BASE_MODEL = "unsloth/Qwen2.5-0.5B-Instruct-bnb-4bit"
+
+LLM_SYSTEM_PROMPT = (
+    "You are an expert supply-chain investigator for RecallTrace. "
+    "You receive an observation of a product recall investigation and must "
+    "respond with the next best action as a JSON object. "
+    "Available actions: inspect_node, trace_lot, quarantine, notify, finalize."
+)
+
+
+def _load_llm():
+    """Lazy-load the trained LoRA model from HF Hub (runs once)."""
+    global _llm_model, _llm_tokenizer
+    if _llm_model is not None:
+        return _llm_model, _llm_tokenizer
+
+    import torch
+    if not torch.cuda.is_available():
+        raise RuntimeError("No GPU available — LLM inference requires CUDA")
+
+    from peft import AutoPeftModelForCausalLM
+    from transformers import AutoTokenizer
+
+    print(f"  Loading trained model from {LLM_HUB_MODEL}...")
+    _llm_tokenizer = AutoTokenizer.from_pretrained(LLM_HUB_MODEL)
+    _llm_model = AutoPeftModelForCausalLM.from_pretrained(
+        LLM_HUB_MODEL,
+        torch_dtype=torch.float16,
+        device_map="auto",
+        load_in_4bit=True,
+    )
+    _llm_model.eval()
+    print(f"  ✅ Model loaded successfully on {_llm_model.device}")
+    return _llm_model, _llm_tokenizer
+
+
+def _format_obs_for_llm(obs) -> str:
+    """Format an observation into a text prompt for the LLM."""
+    d = obs.model_dump() if hasattr(obs, 'model_dump') else obs
+    parts = [f"Step: {d.get('steps_taken', 0)}/{d.get('max_steps', 15)}"]
+    if d.get('recall_notice'):
+        parts.append(f"Recall: {d['recall_notice']}")
+    if d.get('nodes'):
+        names = [n.get('node_id', n.get('id', '?')) for n in d['nodes'][:8]]
+        parts.append(f"Visible nodes: {', '.join(names)}")
+    if d.get('evidence'):
+        parts.append(f"Evidence items: {len(d['evidence'])}")
+        for ev in d['evidence'][:3]:
+            parts.append(f"  - {ev}")
+    if d.get('quarantined_nodes'):
+        parts.append(f"Already quarantined: {d['quarantined_nodes']}")
+    return "\n".join(parts)
+
+
+class LLMRunRequest(BaseModel):
+    task_id: Optional[str] = None
+
+
+@app.get("/api/llm/status")
+def llm_status() -> dict:
+    """Check if GPU + model are available."""
+    import torch
+    gpu = torch.cuda.is_available()
+    loaded = _llm_model is not None
+    gpu_name = torch.cuda.get_device_name(0) if gpu else None
+    return {"gpu_available": gpu, "model_loaded": loaded, "gpu_name": gpu_name}
+
+
+@app.post("/api/llm/run_episode")
+def llm_run_episode(request: LLMRunRequest = Body(default=LLMRunRequest())) -> dict:
+    """Run a full episode using the trained LLM agent."""
+    import torch
+
+    try:
+        model, tokenizer = _load_llm()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Model loading failed: {e}")
+
+    # Pick a task
+    tasks = RecallTraceEnv.available_tasks()
+    task_id = request.task_id
+    if not task_id:
+        task_id = random.choice(tasks).task_id
+    task = next((t for t in tasks if t.task_id == task_id), tasks[0])
+
+    env = RecallTraceEnv(task_id=task.task_id)
+    obs = env.reset(task_id=task.task_id)
+    steps_log = []
+    total_reward = 0.0
+
+    for step_num in range(1, env.task.max_steps + 1):
+        prompt_text = _format_obs_for_llm(obs)
+        messages = [
+            {"role": "system", "content": LLM_SYSTEM_PROMPT},
+            {"role": "user", "content": prompt_text},
+        ]
+        input_text = tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
+
+        with torch.no_grad():
+            outputs = model.generate(
+                **inputs, max_new_tokens=200,
+                temperature=0.1, do_sample=True,
+                pad_token_id=tokenizer.eos_token_id,
+            )
+        raw_response = tokenizer.decode(
+            outputs[0][inputs["input_ids"].shape[1]:],
+            skip_special_tokens=True
+        ).strip()
+
+        # Parse model output into an action
+        used_fallback = False
+        try:
+            import json as _json
+            action_dict = _json.loads(raw_response)
+            action = RecallAction.model_validate(action_dict)
+        except Exception:
+            action = choose_heuristic_action(obs)
+            used_fallback = True
+
+        obs, reward, done, info = env.step(action)
+        total_reward += reward
+
+        steps_log.append({
+            "step": step_num,
+            "model_output": raw_response[:500],
+            "action": action.model_dump(exclude_none=True),
+            "used_fallback": used_fallback,
+            "reward": round(reward, 4),
+            "done": done,
+        })
+
+        if done:
+            break
+
+    score = info.get("score") or 0.0
+    return {
+        "task": task.model_dump(),
+        "score": round(float(score), 4),
+        "total_reward": round(total_reward, 4),
+        "steps_taken": len(steps_log),
+        "steps": steps_log,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Single-episode detailed trace (for step-by-step animation)
 # ---------------------------------------------------------------------------
 
