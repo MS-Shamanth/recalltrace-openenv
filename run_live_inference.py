@@ -6,8 +6,10 @@ from huggingface_hub import InferenceClient
 
 # Configuration
 SPACE_URL = "https://ms-shamanth-recalltrace-openenv.hf.space"
-# Local Model Configuration
 MODEL_ID = "ms-shamanth/recalltrace-investigator"
+
+# Get HF token from environment
+HF_TOKEN = os.environ.get("HF_TOKEN")
 
 def get_system_prompt():
     return """You are a supply-chain investigator AI.
@@ -56,27 +58,15 @@ def format_observation(obs: dict) -> str:
     return prompt
 
 def run_loop():
-    print(f"--- Starting Live Inference Loop ---")
+    print(f"--- Starting Live API Inference Loop ---")
     print(f"Environment: {SPACE_URL}")
-    print(f"Model: {MODEL_ID} (Running locally via Unsloth)")
+    print(f"Model: {MODEL_ID} (via HF Serverless API)")
     
-    # 1. Initialize Local Model via Unsloth
-    print("\nLoading local model into GPU memory...")
-    try:
-        from unsloth import FastLanguageModel
-        model, tokenizer = FastLanguageModel.from_pretrained(
-            model_name=MODEL_ID,
-            max_seq_length=2048,
-            load_in_4bit=True,
-        )
-        FastLanguageModel.for_inference(model)
-        print("Model loaded successfully!")
-    except ImportError:
-        print("Error: 'unsloth' is not installed. Please run this script in the environment where you trained the model.")
-        return
-    except Exception as e:
-        print(f"Failed to load model: {e}")
-        return
+    if not HF_TOKEN:
+        print("WARNING: HF_TOKEN environment variable is not set. Inference API may rate-limit or reject the request.")
+    
+    # 1. Initialize API Client
+    client = InferenceClient(model=MODEL_ID, token=HF_TOKEN)
     
     # 2. Reset Environment
     print("\n[1] Resetting remote environment...")
@@ -105,18 +95,21 @@ def run_loop():
         obs_text = format_observation(obs)
         messages.append({"role": "user", "content": obs_text})
         
-        print("Running local GPU inference...")
+        print("Querying Hugging Face Inference API...")
         try:
-            # Format using tokenizer chat template
-            inputs = tokenizer.apply_chat_template(
-                messages,
-                tokenize=True,
-                add_generation_prompt=True,
-                return_tensors="pt"
-            ).to("cuda")
+            # Manually format for Qwen/ChatML
+            prompt_str = ""
+            for msg in messages:
+                prompt_str += f"<|im_start|>{msg['role']}\n{msg['content']}<|im_end|>\n"
+            prompt_str += "<|im_start|>assistant\n"
             
-            outputs = model.generate(input_ids=inputs, max_new_tokens=150, use_cache=True, temperature=0.1)
-            raw_action = tokenizer.decode(outputs[0][inputs.shape[1]:], skip_special_tokens=True).strip()
+            raw_action = client.text_generation(
+                prompt=prompt_str,
+                max_new_tokens=150,
+                temperature=0.1,
+                top_p=0.9,
+                return_full_text=False
+            ).strip()
             
             if raw_action.startswith("```json"):
                 raw_action = raw_action[7:-3].strip()
