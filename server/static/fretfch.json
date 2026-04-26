@@ -1,35 +1,3 @@
-{
-  "dataset_name": "fretfch",
-  "scenarios": [
-    {
-      "node_count": 8,
-      "contamination_type": "mixing_event",
-      "graph_region": "midstream",
-      "description": "Midstream mixing of multiple lots (Difficulty: Medium)"
-    },
-    {
-      "node_count": 12,
-      "contamination_type": "lot_relabel",
-      "graph_region": "downstream",
-      "description": "Downstream relabeling by a distributor (Difficulty: Hard)"
-    },
-    {
-      "node_count": 6,
-      "contamination_type": "source_contamination",
-      "graph_region": "upstream",
-      "description": "Simple upstream source contamination (Difficulty: Easy)"
-    },
-    {
-      "node_count": 15,
-      "contamination_type": "record_deletion",
-      "graph_region": "midstream",
-      "description": "Missing records mid-graph (Difficulty: Expert)"
-    },
-    {
-      "node_count": 10,
-      "contamination_type": "mixing_event",
-      "graph_region": "upstream",
-      "description": "Early stage mixing event (Difficulty: Medium)"
-    }
-  ]
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:b9ffe281df698b62b04d9732c95a67fdfe1d55b9e9d7b33e145ed3c729023050
+size 1017
