@@ -6,7 +6,7 @@ from huggingface_hub import InferenceClient
 
 # Configuration
 SPACE_URL = "https://ms-shamanth-recalltrace-openenv.hf.space"
-MODEL_ID = "ms-shamanth/recalltrace-investigator"
+MODEL_ID = "meta-llama/Llama-3.1-8B-Instruct"
 
 # Get HF token from environment
 HF_TOKEN = os.environ.get("HF_TOKEN")
@@ -97,19 +97,13 @@ def run_loop():
         
         print("Querying Hugging Face Inference API...")
         try:
-            # Manually format for Qwen/ChatML
-            prompt_str = ""
-            for msg in messages:
-                prompt_str += f"<|im_start|>{msg['role']}\n{msg['content']}<|im_end|>\n"
-            prompt_str += "<|im_start|>assistant\n"
-            
-            raw_action = client.text_generation(
-                prompt=prompt_str,
-                max_new_tokens=150,
+            response = client.chat_completion(
+                messages=messages,
+                max_tokens=150,
                 temperature=0.1,
-                top_p=0.9,
-                return_full_text=False
-            ).strip()
+                top_p=0.9
+            )
+            raw_action = response.choices[0].message.content.strip()
             
             if raw_action.startswith("```json"):
                 raw_action = raw_action[7:-3].strip()
