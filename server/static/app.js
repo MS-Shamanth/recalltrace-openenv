@@ -630,7 +630,8 @@ async function initManualMode() {
   document.getElementById('manual-status-badge').textContent = 'Loading...';
   
   try {
-    const res = await fetch('/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+    const numNodes = parseInt(document.getElementById('manual-nodes-slider').value) || 10;
+    const res = await fetch('/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ num_nodes: numNodes }) });
     manualState = await res.json();
     
     // Fetch fresh graph structure

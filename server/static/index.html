@@ -459,6 +459,10 @@
           </div>
           <div class="manual-controls">
             <div class="input-group">
+              <label>Graph Nodes (<span id="manual-nodes-val">10</span>)</label>
+              <input type="range" id="manual-nodes-slider" min="6" max="30" value="10" step="2" class="range-input" oninput="document.getElementById('manual-nodes-val').textContent = this.value">
+            </div>
+            <div class="input-group">
               <label>Action</label>
               <select id="manual-action" onchange="updateManualTargets()">
                 <option value="inspect_node">Inspect Node</option>

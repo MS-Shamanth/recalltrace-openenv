@@ -39,6 +39,7 @@ ACTIVE_ENV = RecallTraceEnv()
 class ResetRequest(BaseModel):
     task_id: Optional[str] = None
     phase: Optional[int] = None
+    num_nodes: Optional[int] = None
 
 
 class RunEpisodeRequest(BaseModel):
@@ -89,9 +90,15 @@ def reset_get(task_id: Optional[str] = None, phase: Optional[int] = None) -> dic
 
 @app.post("/reset")
 def reset_post(request: ResetRequest | None = Body(default=None)) -> dict:
+    global ACTIVE_ENV
     request = request or ResetRequest()
     try:
-        return ACTIVE_ENV.reset(task_id=request.task_id, phase=request.phase).model_dump()
+        if request.num_nodes:
+            from selfplay.scenario_gen import generate_graph
+            ACTIVE_ENV = RecallTraceEnv(scenario_data=generate_graph(num_nodes=request.num_nodes))
+            return ACTIVE_ENV.reset().model_dump()
+        else:
+            return ACTIVE_ENV.reset(task_id=request.task_id, phase=request.phase).model_dump()
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
