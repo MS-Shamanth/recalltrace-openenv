@@ -16,43 +16,55 @@ def get_system_prompt():
 You must identify and contain contamination in a supply chain graph.
 
 AVAILABLE TOOLS:
-1. {"type": "inspect_node", "node_id": "W1"} -> Inspect a node's inventory and evidence.
-2. {"type": "trace_lot", "lot_id": "L123"} -> Trace a specific lot through the supply chain.
-3. {"type": "cross_reference", "node_id": "W1"} -> Compare physical inventory with records.
-4. {"type": "request_lab_test", "node_id": "W1"} -> Run a 24-hour pathogen test on a node.
-5. {"type": "quarantine", "node_id": "W1", "rationale": "reason"} -> Quarantine a node.
-6. {"type": "notify", "node_id": "W1"} -> Alert downstream nodes.
+1. {"type": "inspect_node", "node_id": "warehouse_0"} -> Inspect a node's inventory and evidence.
+2. {"type": "trace_lot", "lot_id": "LotA"} -> Trace a specific lot through the supply chain.
+3. {"type": "cross_reference", "node_id": "warehouse_0"} -> Compare physical inventory with records.
+4. {"type": "request_lab_test", "node_id": "warehouse_0"} -> Run a 24-hour pathogen test on a node.
+5. {"type": "quarantine", "node_id": "warehouse_0", "lot_id": "LotA", "rationale": "reason"} -> Quarantine a specific lot at a node.
+6. {"type": "notify", "node_id": "warehouse_0"} -> Alert downstream nodes.
 7. {"type": "finalize", "rationale": "reason"} -> Submit final containment strategy.
 
 OUTPUT FORMAT:
-You must output a SINGLE valid JSON object matching one of the tools above. Do not output any markdown formatting, thoughts, or extra text. Just the JSON object.
+You must output a SINGLE valid JSON object matching one of the tools above. Do not output any markdown formatting, thoughts, or extra text. Just the JSON object. You must ONLY use nodes and lots explicitly present in the CURRENT OBSERVATION.
 """
 
 def format_observation(obs: dict) -> str:
     """Format the environment state into a text prompt."""
     prompt = "CURRENT OBSERVATION:\n"
     
-    budget = obs.get("budget", {})
-    prompt += f"Steps Remaining: {budget.get('steps_remaining', '?')}\n\n"
+    steps = obs.get("remaining_step_budget", "?")
+    prompt += f"Steps Remaining: {steps}\n\n"
     
-    state = obs.get("state", {})
+    notice = obs.get("recall_notice", "")
+    if notice:
+        prompt += f"RECALL NOTICE: {notice}\n\n"
+        
     prompt += "KNOWLEDGE BASE:\n"
     
-    nodes = state.get("nodes", {})
-    if not nodes:
+    inventory = obs.get("inventory", {})
+    belief = obs.get("belief_state", {})
+    inspected = obs.get("inspected_nodes", [])
+    quarantined = obs.get("quarantined_inventory", {})
+    
+    all_nodes = set(list(inventory.keys()) + list(belief.keys()))
+    if not all_nodes:
         prompt += "No nodes investigated yet.\n"
     else:
-        for nid, ndata in nodes.items():
+        for nid in sorted(list(all_nodes)):
             prompt += f"- Node {nid}:\n"
-            if ndata.get("inventory"):
-                prompt += f"  Inventory: {', '.join(ndata['inventory'])}\n"
-            if ndata.get("evidence_strength") is not None:
-                prompt += f"  Contamination Evidence: {ndata['evidence_strength']:.2f}\n"
-            if ndata.get("quarantined_inventory"):
+            if nid in inventory:
+                inv_str = ", ".join([f"{k}: {v}" for k,v in inventory[nid].items()])
+                prompt += f"  Inventory: {inv_str}\n"
+            if nid in belief:
+                prompt += f"  Suspicion Score: {belief[nid]:.2f}\n"
+            if nid in inspected:
+                prompt += f"  Status: INSPECTED\n"
+            if nid in quarantined:
                 prompt += f"  Status: QUARANTINED\n"
                 
-    if obs.get("feedback"):
-        prompt += f"\nPREVIOUS ACTION FEEDBACK:\n{obs['feedback']}\n"
+    history = obs.get("history", [])
+    if history:
+        prompt += f"\nPREVIOUS ACTION FEEDBACK:\n{history[-1]}\n"
         
     prompt += "\nDecide your next action and output ONLY valid JSON:"
     return prompt
@@ -83,6 +95,7 @@ def run_loop():
     done = False
     step_count = 0
     total_reward = 0.0
+    action_history = []
     
     messages = [
         {"role": "system", "content": get_system_prompt()}
@@ -118,7 +131,7 @@ def run_loop():
         except Exception as e:
             print(f"Model Inference Failed: {e}")
             print("Fallback to safe action: inspect_node on first available node")
-            fallback_node = "W1"
+            fallback_node = "warehouse_0"
             if obs.get("inventory"):
                 fallback_node = list(obs["inventory"].keys())[0]
             elif obs.get("belief_state"):
@@ -132,8 +145,15 @@ def run_loop():
             res.raise_for_status()
             step_data = res.json()
             
-            obs = step_data.get("observation", {})
             reward = step_data.get("reward", 0.0)
+            
+            action_history.append({
+                "obs": obs,
+                "action": action_dict,
+                "reward": reward
+            })
+            
+            obs = step_data.get("observation", {})
             done = step_data.get("done", False)
             info = step_data.get("info", {})
             
@@ -151,11 +171,37 @@ def run_loop():
     print(f"Total Steps: {step_count}")
     print(f"Total Reward: {total_reward:.4f}")
     
-    # In a real HF Job, we could push these metrics to a Dataset.
-    # For now, we print them out.
-    print("\nTo log this to a Hugging Face Dataset automatically, you can add code here to use:")
-    print("from huggingface_hub import Repository")
-    print("or use datasets.Dataset.push_to_hub()")
+    try:
+        from datasets import Dataset
+        from huggingface_hub import whoami
+        import uuid
+        import pandas as pd
+        
+        print("\nSaving trace to Hugging Face Dataset...")
+        ep_id = str(uuid.uuid4())
+        
+        data = {
+            "episode_id": [ep_id] * len(action_history),
+            "step": list(range(len(action_history))),
+            "observation": [json.dumps(h["obs"]) for h in action_history],
+            "action": [json.dumps(h["action"]) for h in action_history],
+            "reward": [h["reward"] for h in action_history]
+        }
+        
+        ds = Dataset.from_dict(data)
+        
+        # Get username from token to push to the correct namespace
+        username = whoami(token=HF_TOKEN, cache=True)["name"]
+        dataset_repo = f"{username}/recalltrace-inference-logs"
+        
+        ds.push_to_hub(dataset_repo, token=HF_TOKEN, private=True)
+        print(f"Successfully pushed dataset to https://huggingface.co/datasets/{dataset_repo}")
+    except ImportError:
+        print("\n'datasets' package not found. Skipping Hugging Face dataset upload.")
+        print("To log this to a Hugging Face Dataset automatically, install the `datasets` package:")
+        print("pip install datasets pandas")
+    except Exception as e:
+        print(f"\nFailed to push dataset to Hugging Face: {e}")
 
 if __name__ == "__main__":
     run_loop()
