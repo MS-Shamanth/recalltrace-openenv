@@ -50,9 +50,11 @@ SYSTEM_PROMPT = (
     "You receive an observation of a product recall investigation and must "
     "choose the optimal next action. Respond with ONLY a valid JSON object.\n"
     "Available actions:\n"
-    "- inspect_node: {\"type\":\"inspect_node\",\"node_id\":\"...\",\"rationale\":\"...\"}\n"
-    "- trace_lot: {\"type\":\"trace_lot\",\"lot_id\":\"...\",\"rationale\":\"...\"}\n"
-    "- quarantine: {\"type\":\"quarantine\",\"node_id\":\"...\",\"lot_id\":\"...\",\"quantity\":N,\"rationale\":\"...\"}\n"
+"- inspect_node: {\"type\":\"inspect_node\",\"node_id\":\"...\",\"rationale\":\"...\"}\n"
+"- trace_lot: {\"type\":\"trace_lot\",\"lot_id\":\"...\",\"rationale\":\"...\"}\n"
+"- cross_reference: {\"type\":\"cross_reference\",\"lot_id\":\"...\",\"rationale\":\"...\"}\n"
+"- request_lab_test: {\"type\":\"request_lab_test\",\"node_id\":\"...\",\"lot_id\":\"...\",\"rationale\":\"...\"}\n"
+"- quarantine: {\"type\":\"quarantine\",\"node_id\":\"...\",\"lot_id\":\"...\",\"quantity\":N,\"rationale\":\"...\"}\n"
     "- notify: {\"type\":\"notify\",\"node_id\":\"all\",\"rationale\":\"...\"}\n"
     "- finalize: {\"type\":\"finalize\",\"rationale\":\"...\"}"
 )
@@ -90,6 +92,18 @@ def format_observation(obs) -> str:
         for lid, tr in obs.trace_results.items():
             nodes = tr.get("affected_nodes", [])
             lines.append(f"  {lid}: affected_nodes={nodes}")
+
+    if getattr(obs, "belief_state", None):
+        ranked = sorted(obs.belief_state.items(), key=lambda item: item[1], reverse=True)[:6]
+        lines.append("BELIEF STATE:")
+        for nid, score in ranked:
+            lines.append(f"  {nid}: P(contaminated)={score:.2f}")
+
+    if getattr(obs, "risk_summary", None):
+        lines.append(f"RISK SUMMARY: {json.dumps(obs.risk_summary, sort_keys=True)}")
+
+    if getattr(obs, "root_cause_candidates", None):
+        lines.append(f"ROOT CAUSE CANDIDATES: {', '.join(obs.root_cause_candidates)}")
 
     if obs.quarantined_inventory:
         lines.append("QUARANTINED:")

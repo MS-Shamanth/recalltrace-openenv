@@ -864,9 +864,14 @@ populateLLMTasks();
 // ===== GRADIO UI LOGIC =====
 function switchGradioTab(tabId) {
   document.querySelectorAll('.inner-tab-btn').forEach(btn => btn.classList.remove('active'));
-  document.querySelectorAll('.gradio-tab-content').forEach(content => content.classList.add('hidden'));
+  document.querySelectorAll('.gradio-tab-content').forEach(content => {
+    content.classList.remove('active');
+    content.classList.add('hidden');
+  });
   document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
-  document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+  const selected = document.getElementById(`tab-${tabId}`);
+  selected.classList.add('active');
+  selected.classList.remove('hidden');
 }
 
 function switchPlot(prefix, plotName, btnElement) {

@@ -8,6 +8,8 @@ matplotlib
 networkx
 torch
 transformers>=4.51.3
+huggingface_hub>=0.24.0
+hf_transfer>=0.1.8
 peft>=0.18.0
 accelerate
 bitsandbytes>=0.45.5

@@ -10,6 +10,8 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.115.0,<1.0.0",
+  "hf_transfer>=0.1.8",
+  "huggingface_hub>=0.24.0",
   "openai>=2.7.2,<3.0.0",
   "openenv-core>=0.2.0",
   "pydantic>=2.7.0,<3.0.0",

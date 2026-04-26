@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
 import random
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -198,6 +200,8 @@ def selfplay_run(request: SelfPlayRequest) -> dict:
             "late_f1": round(sum(s["investigator_f1"] for s in late) / len(late), 4),
             "early_quarantined": round(sum(s["num_quarantined"] for s in early) / len(early), 2),
             "late_quarantined": round(sum(s["num_quarantined"] for s in late) / len(late), 2),
+            "early_remaining_contaminated": round(sum(s.get("remaining_contaminated_nodes", 0) for s in early) / len(early), 2),
+            "late_remaining_contaminated": round(sum(s.get("remaining_contaminated_nodes", 0) for s in late) / len(late), 2),
             "early_steps": round(sum(s["steps_taken"] for s in early) / len(early), 2),
             "late_steps": round(sum(s["steps_taken"] for s in late) / len(late), 2),
             "adversary_strategy": trainer.adversary.get_strategy_summary(),
@@ -298,15 +302,18 @@ def graph_structure() -> dict:
 
 _llm_model = None
 _llm_tokenizer = None
+_llm_prefetch_started = False
 
-LLM_HUB_MODEL = "ms-shamanth/recalltrace-investigator"
-LLM_BASE_MODEL = "unsloth/Qwen2.5-0.5B-Instruct-bnb-4bit"
+LLM_HUB_MODEL = os.getenv("LLM_HUB_MODEL", "ms-shamanth/recalltrace-investigator")
+LLM_BASE_MODEL = os.getenv("LLM_BASE_MODEL", "unsloth/Qwen2.5-0.5B-Instruct-bnb-4bit")
+HF_CACHE_DIR = os.getenv("HF_HOME") or os.getenv("HF_HUB_CACHE")
+ENABLE_HF_MODEL_PREFETCH = os.getenv("ENABLE_HF_MODEL_PREFETCH", "1") == "1"
 
 LLM_SYSTEM_PROMPT = (
     "You are an expert supply-chain investigator for RecallTrace. "
     "You receive an observation of a product recall investigation and must "
     "respond with the next best action as a JSON object. "
-    "Available actions: inspect_node, trace_lot, quarantine, notify, finalize."
+    "Available actions: inspect_node, trace_lot, cross_reference, request_lab_test, quarantine, notify, finalize."
 )
 
 
@@ -324,7 +331,7 @@ def _load_llm():
     from peft import PeftModel
 
     print(f"  Loading tokenizer from {LLM_HUB_MODEL}...")
-    _llm_tokenizer = AutoTokenizer.from_pretrained(LLM_HUB_MODEL)
+    _llm_tokenizer = AutoTokenizer.from_pretrained(LLM_HUB_MODEL, cache_dir=HF_CACHE_DIR)
     
     print(f"  Loading 4-bit base model {LLM_BASE_MODEL}...")
     quant_config = BitsAndBytesConfig(load_in_4bit=True)
@@ -333,14 +340,45 @@ def _load_llm():
         torch_dtype=torch.float16,
         device_map="auto",
         quantization_config=quant_config,
+        cache_dir=HF_CACHE_DIR,
     )
     
     print(f"  Applying LoRA adapters from {LLM_HUB_MODEL}...")
-    _llm_model = PeftModel.from_pretrained(base_model, LLM_HUB_MODEL)
+    _llm_model = PeftModel.from_pretrained(base_model, LLM_HUB_MODEL, cache_dir=HF_CACHE_DIR)
     _llm_model.eval()
     
     print(f"  ✅ Model loaded successfully on {_llm_model.device}")
     return _llm_model, _llm_tokenizer
+
+
+def _prefetch_hub_artifacts() -> None:
+    """Warm the HF Hub adapter/tokenizer cache without blocking the Space UI."""
+    try:
+        from huggingface_hub import snapshot_download
+
+        snapshot_download(
+            repo_id=LLM_HUB_MODEL,
+            cache_dir=HF_CACHE_DIR,
+            allow_patterns=[
+                "adapter_config.json",
+                "adapter_model.*",
+                "tokenizer.*",
+                "special_tokens_map.json",
+                "tokenizer_config.json",
+            ],
+        )
+        print(f"  HF Hub adapter cache warmed for {LLM_HUB_MODEL}")
+    except Exception as exc:
+        print(f"  HF Hub prefetch skipped: {exc}")
+
+
+@app.on_event("startup")
+def warm_hf_hub_cache() -> None:
+    """Link the Space to the Hub model cache early so first inference is faster."""
+    global _llm_prefetch_started
+    if ENABLE_HF_MODEL_PREFETCH and not _llm_prefetch_started:
+        _llm_prefetch_started = True
+        threading.Thread(target=_prefetch_hub_artifacts, daemon=True).start()
 
 
 def _format_obs_for_llm(obs) -> str:
@@ -358,6 +396,20 @@ def _format_obs_for_llm(obs) -> str:
             parts.append(f"  - {ev}")
     if d.get('quarantined_nodes'):
         parts.append(f"Already quarantined: {d['quarantined_nodes']}")
+    if d.get("inventory"):
+        visible = []
+        for node_id, lots in list(d["inventory"].items())[:8]:
+            visible.append(f"{node_id}: {lots}")
+        parts.append("Inventory: " + " | ".join(visible))
+    if d.get("trace_results"):
+        parts.append(f"Trace results: {d['trace_results']}")
+    if d.get("belief_state"):
+        ranked = sorted(d["belief_state"].items(), key=lambda item: item[1], reverse=True)[:6]
+        parts.append("Belief state: " + ", ".join(f"{node}={score:.2f}" for node, score in ranked))
+    if d.get("risk_summary"):
+        parts.append(f"Risk summary: {d['risk_summary']}")
+    if d.get("root_cause_candidates"):
+        parts.append(f"Root cause candidates: {d['root_cause_candidates']}")
     return "\n".join(parts)
 
 

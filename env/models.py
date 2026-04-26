@@ -11,6 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field
 class ActionType(str, Enum):
     INSPECT_NODE = "inspect_node"
     TRACE_LOT = "trace_lot"
+    CROSS_REFERENCE = "cross_reference"
+    REQUEST_LAB_TEST = "request_lab_test"
     QUARANTINE = "quarantine"
     NOTIFY = "notify"
     FINALIZE = "finalize"
@@ -77,6 +79,9 @@ class RecallObservation(BaseModel):
     trace_results: Dict[str, Dict[str, Any]]
     notified_nodes: List[str]
     quarantined_inventory: Dict[str, Dict[str, int]]
+    belief_state: Dict[str, float] = Field(default_factory=dict)
+    risk_summary: Dict[str, Any] = Field(default_factory=dict)
+    root_cause_candidates: List[str] = Field(default_factory=list)
     history: List[str]
     steps_taken: int = Field(ge=0)
     remaining_step_budget: int = Field(ge=0)

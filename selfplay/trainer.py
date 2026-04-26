@@ -81,6 +81,11 @@ class SelfPlayTrainer:
                 quarantined_nodes.append(node_id)
 
         f1, f1_details = compute_f1(scenario, quarantined_nodes)
+        quarantine_match = info.get("quarantine_match", {}) if isinstance(info, dict) else {}
+        if not quarantine_match:
+            quarantine_match = env._compute_quarantine_match()
+        remaining_contaminated_nodes = len(quarantine_match.get("missing_quantities", {}))
+        total_contaminated_nodes = len(env_state.ground_truth.get("affected_nodes", []))
 
         # 7) Compute investigator reward with the specified reward structure
         inv_reward = 0.0
@@ -111,6 +116,8 @@ class SelfPlayTrainer:
             "adversary_reward": round(adversary_reward, 4),
             "investigator_reward": round(inv_reward, 4),
             "num_quarantined": len(quarantined_nodes),
+            "remaining_contaminated_nodes": remaining_contaminated_nodes,
+            "total_contaminated_nodes": total_contaminated_nodes,
             "intervention_type": intervention_type,
             "graph_region": graph_region,
             "target_node": target_node,
@@ -186,4 +193,5 @@ class SelfPlayTrainer:
             "quarantine_threshold": [s["quarantine_threshold"] for s in stats],
             "exploration_rate": [s["exploration_rate"] for s in stats],
             "belief_confidence": [s["belief_confidence"] for s in stats],
+            "remaining_contaminated_nodes": [s.get("remaining_contaminated_nodes", 0) for s in stats],
         }
