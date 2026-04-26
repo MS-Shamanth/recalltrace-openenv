@@ -898,6 +898,10 @@ function switchPlot(prefix, plotName, btnElement) {
       if(plotName === 'RL Training Curves') src = '/static/plots/rl_training.png';
       if(plotName === 'RL F1 Curve') src = '/static/plots/rl/f1_curve.png';
       if(plotName === 'RL Co-Evolution') src = '/static/plots/rl_coevolution.png';
+      if(plotName === 'RL Belief Calibration') src = '/static/plots/rl/belief_calibration.png';
+      if(plotName === 'RL Nodes Quarantined') src = '/static/plots/rl/nodes_quarantined.png';
+      if(plotName === 'RL Steps To Finalize') src = '/static/plots/rl/steps_to_finalize.png';
+      if(plotName === 'RL Episode Comparison') src = '/static/plots/rl/episode_comparison.png';
     }
     imgEl.src = src;
   }

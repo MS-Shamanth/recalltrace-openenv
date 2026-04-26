@@ -12,7 +12,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
     rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=12">
+  <link rel="stylesheet" href="/static/styles.css?v=14">
 </head>
 
 <body>
@@ -390,10 +390,78 @@
           </div>
         </div>
 
+        <section class="rl-architecture-panel">
+          <div class="rl-architecture-header">
+            <span class="section-kicker">PyTorch RL Agent</span>
+            <h3>System Architecture</h3>
+          </div>
+
+          <div class="arch-grid">
+            <div class="arch-card">
+              <h3 class="arch-agent-1">Investigator (Agent 1)</h3>
+              <p>Uses 7 tools to investigate. Maintains belief state P(contaminated) per node. Must identify the hidden intervention type before quarantining.</p>
+              <div class="tool-badges">
+                <span class="tool-badge">inspect_node</span>
+                <span class="tool-badge">trace_lot</span>
+                <span class="tool-badge">cross_reference</span>
+                <span class="tool-badge">request_lab_test</span>
+                <span class="tool-badge">quarantine</span>
+                <span class="tool-badge">notify</span>
+                <span class="tool-badge">finalize</span>
+              </div>
+            </div>
+
+            <div class="arch-card">
+              <h3 class="arch-agent-2">Adversary (Agent 2)</h3>
+              <p>Chooses which intervention to apply and where, maximizing investigator failure. 18-cell score table (type x region x density) adapts via EMA.</p>
+              <div class="tool-badges">
+                <span class="adv-badge">lot_relabel</span>
+                <span class="adv-badge">mixing_event</span>
+                <span class="adv-badge">record_deletion</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="arch-reward-card">
+            <h3 class="arch-reward-title">Composable Reward Function (Ungameable)</h3>
+            <table class="arch-table">
+              <tr><td class="r-recall">Recall</td><td>+2.0 x (unsafe caught / total unsafe)</td><td class="r-desc">Forces finding contamination</td></tr>
+              <tr><td class="r-precision">Precision</td><td>-1.5 x (safe blocked / total safe)</td><td class="r-desc">Prevents spray &amp; pray</td></tr>
+              <tr><td class="r-calib">Calibration</td><td>+0.3 x (quarantined / total unsafe) if P &gt; 0.8</td><td class="r-desc">Rewards confident decisions</td></tr>
+              <tr><td class="r-eff">Efficiency</td><td>-0.05 per step + speed bonus</td><td class="r-desc">Encourages fast investigation</td></tr>
+            </table>
+          </div>
+
+          <div class="arch-card rl-network-card">
+            <h3 class="arch-rl-title">PyTorch RL Architecture</h3>
+            <pre class="arch-pre">
+StateEncoder (112-dim)
+  |-- Per-node features (12 nodes x 8 features)
+  |    inventory, inspected, quarantined, evidence_strength, ...
+  |-- Global features (16-dim)
+       steps, budget, coverage, urgency, evidence_counts, ...
+
+PolicyNetwork (MLP)
+  |-- SharedBackbone: Linear(112,128) -> LN -> ReLU -> Linear(128,64) -> LN -> ReLU
+  |-- ActionHead:     Linear(64, 7)   -> Categorical sampling
+  |-- NodeHead:       Linear(64, 12)  -> Categorical sampling
+  |-- ValueHead:      Linear(64, 1)   -> Baseline for variance reduction
+
+Training: REINFORCE + learned baseline + entropy regularization
+  |-- gamma=0.99, entropy_coef=0.02, lr=3e-4
+  |-- Gradient clipping: max_norm=0.5
+            </pre>
+          </div>
+        </section>
+
         <nav class="plot-tab-nav" id="rl-plot-nav">
           <button class="plot-tab-btn active" onclick="switchPlot('rl', 'RL Training Curves', this)">RL Training Curves</button>
-          <button class="plot-tab-btn" onclick="switchPlot('rl', 'RL F1 Curve', this)">RL F1 Curve</button>
           <button class="plot-tab-btn" onclick="switchPlot('rl', 'RL Co-Evolution', this)">RL Co-Evolution</button>
+          <button class="plot-tab-btn" onclick="switchPlot('rl', 'RL F1 Curve', this)">RL F1 Curve</button>
+          <button class="plot-tab-btn" onclick="switchPlot('rl', 'RL Belief Calibration', this)">RL Belief Calibration</button>
+          <button class="plot-tab-btn" onclick="switchPlot('rl', 'RL Nodes Quarantined', this)">RL Nodes Quarantined</button>
+          <button class="plot-tab-btn" onclick="switchPlot('rl', 'RL Steps To Finalize', this)">RL Steps To Finalize</button>
+          <button class="plot-tab-btn" onclick="switchPlot('rl', 'RL Episode Comparison', this)">RL Episode Comparison</button>
           <button class="plot-tab-btn" onclick="switchPlot('rl', 'Training Log', this)">Training Log</button>
         </nav>
 
@@ -434,10 +502,55 @@
                 <table class="arch-table">
                     <tr><td class="r-recall">Recall</td><td>+2.0 x (unsafe caught / total unsafe)</td><td class="r-desc">Forces finding contamination</td></tr>
                     <tr><td class="r-precision">Precision</td><td>-1.5 x (safe blocked / total safe)</td><td class="r-desc">Prevents spray & pray</td></tr>
-                    <tr><td class="r-calib">Calibration</td><td>+0.3 x (quarantined / total) if P > 0.8</td><td class="r-desc">Rewards confident decisions</td></tr>
+                    <tr><td class="r-calib">Calibration</td><td>+0.3 x (quarantined / total unsafe) if P > 0.8</td><td class="r-desc">Rewards confident decisions</td></tr>
                     <tr><td class="r-eff">Efficiency</td><td>-0.05 per step + speed bonus</td><td class="r-desc">Encourages fast investigation</td></tr>
                 </table>
             </div>
+
+            <section class="coevolution-explainer compact" aria-labelledby="arch-coevolution-title">
+                <div class="coevolution-heading">
+                    <span class="section-kicker">Learning Dynamics</span>
+                    <h3 id="arch-coevolution-title">Adaptive Co-Evolution Loop</h3>
+                    <p>
+                        As the Investigator learns, the Adversary reshapes the curriculum. Mastered
+                        cells are down-weighted, novel attacks are sampled more often, and Matplotlib
+                        buffers the telemetry into readable training curves.
+                    </p>
+                </div>
+
+                <div class="coevolution-grid">
+                    <article class="coevolution-card">
+                        <span class="card-label">Score Table</span>
+                        <strong>18 dynamic cells</strong>
+                        <p>Intervention type x graph region x density bucket.</p>
+                    </article>
+                    <article class="coevolution-card">
+                        <span class="card-label">Sampler</span>
+                        <strong>Temperature Softmax</strong>
+                        <p>Balances pressure on hard cases with exploration of new scenarios.</p>
+                    </article>
+                    <article class="coevolution-card">
+                        <span class="card-label">Feedback</span>
+                        <strong>High F1 reduces reuse</strong>
+                        <p>When the Investigator solves a scenario, that cell becomes less likely.</p>
+                    </article>
+                </div>
+
+                <div class="curve-cards">
+                    <div class="curve-card">
+                        <span>RL F1 Curve</span>
+                        <p>Accuracy expands across episodes.</p>
+                    </div>
+                    <div class="curve-card">
+                        <span>RL Training Curve</span>
+                        <p>Policy loss is tracked against reward.</p>
+                    </div>
+                    <div class="curve-card">
+                        <span>Co-Evolution Curve</span>
+                        <p>Adversary success dips as Investigator capability rises.</p>
+                    </div>
+                </div>
+            </section>
 
             <div class="arch-card">
                 <h3 class="arch-rl-title">PyTorch RL Architecture</h3>
@@ -549,14 +662,76 @@ Training: REINFORCE + learned baseline + entropy regularization
             <h3 style="color: #38bdf8; margin-bottom: 12px; font-size: 1.2rem;">The PyTorch RL Agent</h3>
             <p style="margin-bottom: 20px;">The PyTorch RL Investigator is powered by a Deep Reinforcement Learning policy network. Because the environment's observation space is variable (graphs change size, inventory fluctuates), the architecture utilizes a <code>StateEncoder</code> to map the raw observation dictionaries into a fixed 112-dimensional feature tensor. This tensor is fed into a Multi-Layer Perceptron (MLP) equipped with three distinct output heads: an <strong>Action Head</strong> (to select one of the 7 tools), a <strong>Node Head</strong> (to target a specific node), and a <strong>Value Head</strong> (to predict the baseline reward). The model is trained using the <strong>REINFORCE</strong> algorithm. To ensure stable learning, the Value Head serves as a learned baseline to reduce variance, while an underlying entropy regularization coefficient forces the model to maintain exploration, preventing it from collapsing into trivial behaviors like quarantining every node immediately.</p>
 
-            <h3 style="color: #2ea043; margin-bottom: 12px; font-size: 1.2rem;">Adversarial Co-Evolution & Plot Generation</h3>
-            <p>As the Investigator learns, the learning environment dynamically shifts. The Adversary operates using an 18-cell dynamic score table cross-referencing three dimensions: Intervention Type, Graph Region, and Density Bucket. It uses a temperature-scaled Softmax distribution to sample attacks. If the Investigator expertly solves a specific scenario (scoring a high F1), the Adversary penalizes that specific cell in its table, forcing it to try novel attack patterns. Throughout this process, Python's Matplotlib continuously buffers the telemetry data. The <strong>RL F1 Curve</strong> plots the agent's expanding accuracy across episodes. The <strong>RL Training Curve</strong> tracks the underlying REINFORCE policy loss against the agent's reward. Finally, the <strong>Co-Evolution Curve</strong> maps the dual-agent progression, visually demonstrating the "arms race" where the Adversary's success metric dips precisely as the Investigator's capabilities improve.</p>
+            <section class="coevolution-explainer" aria-labelledby="coevolution-title">
+              <div class="coevolution-heading">
+                <span class="section-kicker">Adaptive Curriculum</span>
+                <h3 id="coevolution-title">Adversarial Co-Evolution &amp; Plot Generation</h3>
+                <p>
+                  As the Investigator improves, the training environment shifts with it. The
+                  Adversary samples harder scenarios, then backs away from cells the Investigator has
+                  already mastered.
+                </p>
+              </div>
+
+              <div class="coevolution-grid">
+                <article class="coevolution-card">
+                  <span class="card-label">Attack Sampler</span>
+                  <strong>18-cell score table</strong>
+                  <p>Cross-references intervention type, graph region, and density bucket.</p>
+                </article>
+                <article class="coevolution-card">
+                  <span class="card-label">Exploration</span>
+                  <strong>Temperature Softmax</strong>
+                  <p>Samples attacks probabilistically so the adversary keeps trying fresh patterns.</p>
+                </article>
+                <article class="coevolution-card">
+                  <span class="card-label">Adaptation Rule</span>
+                  <strong>High F1 penalizes the cell</strong>
+                  <p>Expertly solved scenarios become less likely, pushing the curriculum forward.</p>
+                </article>
+              </div>
+
+              <div class="coevolution-flow" aria-label="Co-evolution loop">
+                <div class="flow-step">
+                  <span>01</span>
+                  <strong>Investigator learns</strong>
+                  <p>F1 improves as the policy identifies hidden interventions more precisely.</p>
+                </div>
+                <div class="flow-connector" aria-hidden="true">&rarr;</div>
+                <div class="flow-step">
+                  <span>02</span>
+                  <strong>Adversary reweights</strong>
+                  <p>Successful cells are penalized and unexplored regions gain sampling pressure.</p>
+                </div>
+                <div class="flow-connector" aria-hidden="true">&rarr;</div>
+                <div class="flow-step">
+                  <span>03</span>
+                  <strong>Telemetry buffers</strong>
+                  <p>Matplotlib continuously records accuracy, loss, reward, and adversary success.</p>
+                </div>
+              </div>
+
+              <div class="curve-cards">
+                <div class="curve-card">
+                  <span>RL F1 Curve</span>
+                  <p>Tracks the agent's expanding accuracy across episodes.</p>
+                </div>
+                <div class="curve-card">
+                  <span>RL Training Curve</span>
+                  <p>Compares REINFORCE policy loss against reward.</p>
+                </div>
+                <div class="curve-card">
+                  <span>Co-Evolution Curve</span>
+                  <p>Shows the arms race: adversary success dips as Investigator capability rises.</p>
+                </div>
+              </div>
+            </section>
           </div>
         </div>
 
         <div class="panel glass-panel">
           <div class="panel-header">
-            <h2>Key Themes</h2>
+            <h2>Theme & Architecture</h2>
           </div>
           <div class="theme-cards">
             <div class="theme-card">
@@ -566,10 +741,10 @@ Training: REINFORCE + learned baseline + entropy regularization
                 reasons under uncertainty.</p>
             </div>
             <div class="theme-card">
-              <span class="theme-tag teal">Theme 4</span>
-              <h3>Recursive Skill Amplification</h3>
-              <p>Adversarial self-play creates an automatic difficulty curriculum. Both agents improve simultaneously in
-                a co-evolutionary loop.</p>
+              <span class="theme-tag teal">Architecture</span>
+              <h3>Dual-Agent Causal Inference</h3>
+              <p>Investigator and Adversary modules share the same environment loop, reward function, telemetry buffer,
+                and PyTorch policy architecture.</p>
             </div>
           </div>
         </div>
@@ -607,7 +782,7 @@ Training: REINFORCE + learned baseline + entropy regularization
     </footer>
   </div>
 
-  <script src="/static/app.js?v=12"></script>
+  <script src="/static/app.js?v=14"></script>
 </body>
 
 </html>
