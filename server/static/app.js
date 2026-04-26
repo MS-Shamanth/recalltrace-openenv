@@ -457,12 +457,24 @@ async function runOpenEnvEpisode() {
 }
 
 async function runAllTasks() {
-  const res = await fetch('/api/run_all');
-  const data = await res.json();
-  document.getElementById('all-score').textContent = data.average_score.toFixed(4);
-  document.getElementById('all-results').innerHTML = data.episodes.map(ep=>
-    `<div class="log-step"><strong>${ep.task.name}</strong><div>Score: ${ep.score.toFixed(4)} | Steps: ${ep.steps_taken} | ${ep.success?'Success':'Needs work'}</div></div>`
-  ).join('');
+  const btn = document.getElementById('run-all-button');
+  const originalText = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Running...';
+  try {
+    const res = await fetch('/api/run_all');
+    if (!res.ok) throw new Error('Failed to run all tasks');
+    const data = await res.json();
+    document.getElementById('all-score').textContent = data.average_score.toFixed(4);
+    document.getElementById('all-results').innerHTML = data.episodes.map(ep=>
+      `<div class="log-step"><strong>${ep.task.name}</strong><div>Score: ${ep.score.toFixed(4)} | Steps: ${ep.steps_taken} | ${ep.success?'Success':'Needs work'}</div></div>`
+    ).join('');
+  } catch (err) {
+    alert("Error: " + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
 }
 
 function renderOERewardChart(logs) {
