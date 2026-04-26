@@ -79,11 +79,43 @@ body {
 
 .hero-glow {
   position: absolute; top: -120px; right: -80px; width: 400px; height: 400px;
-  background: radial-gradient(circle, rgba(255,111,60,0.18) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(56,211,159,0.15) 0%, transparent 70%);
   pointer-events: none;
 }
 
-.hero-content { position: relative; max-width: 720px; }
+.hero-layout {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; position: relative;
+}
+
+.hero-content { position: relative; max-width: 600px; }
+
+/* New Hero Visual */
+.hero-visual {
+  position: relative; height: 100%; display: flex; justify-content: center; align-items: center;
+}
+.glass-orb {
+  position: absolute; border-radius: 50%; filter: blur(60px); opacity: 0.5;
+}
+.orb-1 { width: 200px; height: 200px; background: var(--accent); top: 10%; right: 10%; }
+.orb-2 { width: 250px; height: 250px; background: var(--accent2); bottom: 10%; left: 10%; }
+
+.hero-card {
+  position: relative; z-index: 2; width: 100%; max-width: 380px;
+  background: rgba(14, 20, 32, 0.6); border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 20px; backdrop-filter: blur(24px) saturate(2);
+  padding: 24px; box-shadow: 0 20px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1);
+  transform: perspective(1000px) rotateY(-5deg) rotateX(5deg);
+  transition: transform 0.4s ease;
+}
+.hero-card:hover {
+  transform: perspective(1000px) rotateY(0deg) rotateX(0deg) translateY(-5px);
+}
+.hc-header { display: flex; align-items: center; gap: 10px; font-weight: 600; margin-bottom: 20px; border-bottom: 1px solid var(--panel-border); padding-bottom: 12px; }
+.hc-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent2); box-shadow: 0 0 10px var(--accent2); animation: pulse 2s infinite; }
+.hc-body { display: flex; flex-direction: column; gap: 12px; font-size: 0.9rem; }
+.hc-line { display: flex; justify-content: space-between; color: var(--muted); border-bottom: 1px dashed rgba(255,255,255,0.05); padding-bottom: 8px; }
+.hc-line strong { color: var(--text); font-family: var(--mono); font-size: 0.85rem; }
+.hc-success { color: var(--accent2); justify-content: center; font-weight: 600; padding-top: 8px; border-bottom: none; background: rgba(56,211,159,0.1); border-radius: 8px; padding: 10px; margin-top: 4px; }
 
 .eyebrow {
   display: inline-block; margin-bottom: 12px; color: var(--accent);

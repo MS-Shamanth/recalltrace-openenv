@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=11">
+  <link rel="stylesheet" href="/static/styles.css?v=12">
 </head>
 <body>
   <!-- Particle canvas background -->
@@ -18,42 +18,61 @@
     <!-- ===== HERO ===== -->
     <header class="hero" id="hero">
       <div class="hero-glow"></div>
-      <div class="hero-content">
-        <span class="eyebrow animate-in">Meta PyTorch OpenEnv Hackathon</span>
-        <h1 class="animate-in delay-1">
-          <span class="gradient-text">RecallTrace</span>
-        </h1>
-        <p class="hero-subtitle animate-in delay-2">Causal Inference via Adversarial Self-Play</p>
-        <p class="hero-desc animate-in delay-3">
-          An RL agent that doesn't just detect contamination — it infers the 
-          <strong>hidden causal intervention</strong> behind it. Trained via adversarial 
-          self-play where an adversary learns to hide better as the investigator reasons better.
-        </p>
-        <div class="hero-stats animate-in delay-4">
-          <div class="stat-pill">
-            <span class="stat-value" id="stat-f1">0.95+</span>
-            <span class="stat-label">F1 Score</span>
+      <div class="hero-layout">
+        <div class="hero-content">
+          <h1 class="animate-in delay-1">
+            <span class="gradient-text">RecallTrace</span>
+          </h1>
+          <p class="hero-subtitle animate-in delay-2">Causal Inference via Adversarial Self-Play</p>
+          <p class="hero-desc animate-in delay-3">
+            An RL agent that doesn't just detect contamination — it infers the 
+            <strong>hidden causal intervention</strong> behind it. Trained via adversarial 
+            self-play where an adversary learns to hide better as the investigator reasons better.
+          </p>
+          <div class="hero-stats animate-in delay-4">
+            <div class="stat-pill">
+              <span class="stat-value" id="stat-f1">0.95+</span>
+              <span class="stat-label">F1 Score</span>
+            </div>
+            <div class="stat-pill">
+              <span class="stat-value" id="stat-nodes">3.1</span>
+              <span class="stat-label">Nodes/Episode</span>
+            </div>
+            <div class="stat-pill">
+              <span class="stat-value" id="stat-time">&lt;2s</span>
+              <span class="stat-label">CPU Training</span>
+            </div>
+            <div class="stat-pill">
+              <span class="stat-value" id="stat-episodes">200</span>
+              <span class="stat-label">Episodes</span>
+            </div>
           </div>
-          <div class="stat-pill">
-            <span class="stat-value" id="stat-nodes">3.1</span>
-            <span class="stat-label">Nodes/Episode</span>
-          </div>
-          <div class="stat-pill">
-            <span class="stat-value" id="stat-time">&lt;2s</span>
-            <span class="stat-label">CPU Training</span>
-          </div>
-          <div class="stat-pill">
-            <span class="stat-value" id="stat-episodes">200</span>
-            <span class="stat-label">Episodes</span>
+          <div class="hero-actions animate-in delay-5">
+            <button class="btn btn-primary btn-glow" id="btn-run-simulation" onclick="switchTab('simulation')">
+              <span class="btn-icon">▶</span> Run Simulation
+            </button>
+            <button class="btn btn-outline" onclick="switchTab('llmagent')">
+              <span class="btn-icon">🤖</span> Live LLM Demo
+            </button>
           </div>
         </div>
-        <div class="hero-actions animate-in delay-5">
-          <button class="btn btn-primary btn-glow" id="btn-run-simulation" onclick="switchTab('simulation')">
-            <span class="btn-icon">▶</span> Run Simulation
-          </button>
-          <button class="btn btn-outline" onclick="switchTab('openenv')">
-            <span class="btn-icon">⚡</span> OpenEnv Runner
-          </button>
+
+        <div class="hero-visual animate-in delay-3">
+          <div class="glass-orb orb-1"></div>
+          <div class="glass-orb orb-2"></div>
+          <div class="hero-card">
+            <div class="hc-header">
+              <span class="hc-dot"></span>
+              <span>GPU Inference Status</span>
+            </div>
+            <div class="hc-body">
+              <div class="hc-line"><span>Engine</span> <strong>T4 GPU</strong></div>
+              <div class="hc-line"><span>Base Model</span> <strong>Qwen2.5-0.5B-Instruct</strong></div>
+              <div class="hc-line"><span>LoRA Adapter</span> <strong>RecallTrace (r=16)</strong></div>
+              <div class="hc-line"><span>Precision</span> <strong>4-bit (bitsandbytes)</strong></div>
+              <div class="hc-line hc-success">✅ System Online & Ready</div>
+            </div>
+          </div>
         </div>
       </div>
     </header>
@@ -495,6 +514,6 @@
     </footer>
   </div>
 
-  <script src="/static/app.js?v=11"></script>
+  <script src="/static/app.js?v=12"></script>
 </body>
 </html>
