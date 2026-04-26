@@ -224,7 +224,7 @@ def selfplay_demo() -> dict:
             "early_episode": worst_early,
             "late_episode": best_late,
             "all_stats": stats,
-            "graph": _get_demo_graph(),
+            "graph": graph_structure(),
         }
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -232,36 +232,44 @@ def selfplay_demo() -> dict:
 
 @app.get("/api/graph/structure")
 def graph_structure() -> dict:
-    """Return graph topology for the visualization canvas."""
-    return _get_demo_graph()
-
-
-def _get_demo_graph() -> dict:
-    """Build a sample graph for visualization."""
-    nodes = [
-        {"id": "Supplier_G", "label": "Supplier G", "role": "warehouse", "region": "source", "x": 0.15, "y": 0.5},
-        {"id": "Lot_A", "label": "Lot A", "role": "warehouse", "region": "source", "x": 0.35, "y": 0.25, "contaminated": True},
-        {"id": "Warehouse_B", "label": "Warehouse B", "role": "warehouse", "region": "source", "x": 0.35, "y": 0.75},
-        {"id": "Lot_C", "label": "Lot C", "role": "crossdock", "region": "midstream", "x": 0.55, "y": 0.15, "contaminated": True},
-        {"id": "Distributor_D", "label": "Distributor D", "role": "crossdock", "region": "midstream", "x": 0.55, "y": 0.55},
-        {"id": "Hub_H", "label": "Hub H", "role": "crossdock", "region": "midstream", "x": 0.55, "y": 0.85},
-        {"id": "Retailer_E", "label": "Retailer E", "role": "store", "region": "downstream", "x": 0.78, "y": 0.45},
-        {"id": "Lot_F", "label": "Lot F", "role": "store", "region": "downstream", "x": 0.78, "y": 0.7},
-    ]
-
-    edges = [
-        {"from": "Supplier_G", "to": "Warehouse_B"},
-        {"from": "Supplier_G", "to": "Lot_A"},
-        {"from": "Warehouse_B", "to": "Distributor_D"},
-        {"from": "Warehouse_B", "to": "Hub_H"},
-        {"from": "Lot_A", "to": "Distributor_D"},
-        {"from": "Lot_A", "to": "Lot_C"},
-        {"from": "Distributor_D", "to": "Retailer_E"},
-        {"from": "Distributor_D", "to": "Lot_F"},
-        {"from": "Hub_H", "to": "Retailer_E"},
-        {"from": "Lot_C", "to": "Lot_F"},
-    ]
-
+    """Return dynamic graph topology for the visualization canvas."""
+    if not ACTIVE_ENV.state_data or "shipment_graph" not in ACTIVE_ENV.state_data:
+        ACTIVE_ENV.reset()
+        
+    nodes = []
+    edges = []
+    
+    graph = ACTIVE_ENV.state_data.get("shipment_graph", {})
+    all_nodes = ACTIVE_ENV.state_data.get("nodes", {})
+    
+    # Assign layers
+    layers = {"warehouse": [], "crossdock": [], "store": []}
+    for n_id in all_nodes.keys():
+        if n_id.startswith("warehouse"): layers["warehouse"].append(n_id)
+        elif n_id.startswith("crossdock"): layers["crossdock"].append(n_id)
+        else: layers["store"].append(n_id)
+        
+    x_positions = {"warehouse": 0.15, "crossdock": 0.5, "store": 0.85}
+    
+    # Generate coordinates
+    for role, n_list in layers.items():
+        count = len(n_list)
+        for i, n_id in enumerate(sorted(n_list)):
+            y = 0.1 + (0.8 * i / max(1, count - 1)) if count > 1 else 0.5
+            nodes.append({
+                "id": n_id,
+                "label": n_id.capitalize().replace("_", " "),
+                "role": role,
+                "x": x_positions[role],
+                "y": y,
+                "contaminated": False # the frontend expects boolean, but ground truth shouldn't be exposed immediately unless required. Wait, frontend has logic for true contamination ring, but it's okay to omit or leave False for manual mode.
+            })
+            
+    # Edges
+    for src, targets in graph.items():
+        for tgt in targets:
+            edges.append({"from": src, "to": tgt})
+            
     return {"nodes": nodes, "edges": edges}
 
 

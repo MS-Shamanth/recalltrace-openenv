@@ -619,6 +619,212 @@ async function runLLMEpisode() {
 }
 
 // ---------------------------------------------------------------------------
+// Manual Mode
+// ---------------------------------------------------------------------------
+let manualNodes = [];
+let manualState = null;
+
+async function initManualMode() {
+  const logContainer = document.getElementById('manual-log');
+  logContainer.innerHTML = '<div class="log-item">Initializing new environment...</div>';
+  document.getElementById('manual-status-badge').textContent = 'Loading...';
+  
+  try {
+    const res = await fetch('/reset', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+    manualState = await res.json();
+    
+    // Fetch fresh graph structure
+    const gRes = await fetch('/api/graph/structure');
+    const gData = await gRes.json();
+    manualNodes = gData.nodes || [];
+    
+    drawManualGraph(gData.nodes, gData.edges, manualState);
+    updateManualTargets();
+    
+    document.getElementById('manual-status-badge').textContent = 'Ready';
+    document.getElementById('manual-status-badge').style.color = '#2ea043';
+    document.getElementById('manual-status-badge').style.background = 'rgba(46,160,67,0.2)';
+    
+    logContainer.innerHTML += `<div class="log-item success">Environment Reset. Notice: ${manualState.recall_notice}</div>`;
+  } catch (e) {
+    logContainer.innerHTML += `<div class="log-item error">Failed to reset: ${e.message}</div>`;
+  }
+}
+
+function updateManualTargets() {
+  const action = document.getElementById('manual-action').value;
+  const targetSelect = document.getElementById('manual-target');
+  targetSelect.innerHTML = '';
+  
+  let options = [];
+  if (action === 'inspect_node' || action === 'quarantine' || action === 'notify') {
+    options = manualNodes.map(n => n.id);
+  } else if (action === 'trace_lot') {
+    // Collect all lots from inspection results
+    const lots = new Set();
+    if (manualState && manualState.inspection_results) {
+      Object.values(manualState.inspection_results).forEach(findings => {
+        Object.keys(findings).forEach(lot => lots.add(lot));
+      });
+    }
+    options = Array.from(lots);
+  } else if (action === 'finalize') {
+    options = ['None required'];
+  }
+  
+  if (options.length === 0) {
+    const opt = document.createElement('option');
+    opt.value = '';
+    opt.textContent = 'No available targets';
+    targetSelect.appendChild(opt);
+    return;
+  }
+  
+  options.forEach(optVal => {
+    const opt = document.createElement('option');
+    opt.value = optVal;
+    opt.textContent = optVal;
+    targetSelect.appendChild(opt);
+  });
+}
+
+async function executeManualAction() {
+  const actionType = document.getElementById('manual-action').value;
+  const target = document.getElementById('manual-target').value;
+  const logContainer = document.getElementById('manual-log');
+  
+  if (actionType !== 'finalize' && !target) {
+    logContainer.innerHTML += `<div class="log-item error">Please select a valid target.</div>`;
+    return;
+  }
+  
+  const payload = { type: actionType };
+  if (actionType === 'inspect_node' || actionType === 'quarantine' || actionType === 'notify') {
+    payload.node_id = target;
+  } else if (actionType === 'trace_lot') {
+    payload.lot_id = target;
+  }
+  
+  try {
+    const res = await fetch('/step', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!res.ok) throw new Error('Invalid action');
+    
+    const data = await res.json();
+    manualState = data.observation;
+    
+    let logClass = data.reward >= 0 ? 'success' : 'error';
+    if (data.reward === 0) logClass = '';
+    
+    logContainer.innerHTML += `<div class="log-item ${logClass}">Step ${manualState.steps_taken}: ${data.info.message} (Reward: ${data.reward.toFixed(2)})</div>`;
+    logContainer.scrollTop = logContainer.scrollHeight;
+    
+    const gRes = await fetch('/api/graph/structure');
+    const gData = await gRes.json();
+    drawManualGraph(gData.nodes, gData.edges, manualState);
+    updateManualTargets();
+    
+    if (data.done) {
+      document.getElementById('manual-status-badge').textContent = 'Finished';
+      document.getElementById('manual-status-badge').style.color = '#f0c040';
+      logContainer.innerHTML += `<div class="log-item">Episode finished. Final Score: ${data.info.score}</div>`;
+    }
+    
+  } catch (e) {
+    logContainer.innerHTML += `<div class="log-item error">Error: ${e.message}</div>`;
+  }
+}
+
+function drawManualGraph(nodes, edges, state) {
+  const edgesG = document.getElementById('manual-graph-edges');
+  const nodesG = document.getElementById('manual-graph-nodes');
+  const labelsG = document.getElementById('manual-graph-labels');
+  const overlaysG = document.getElementById('manual-graph-overlays');
+  
+  if (!edgesG || !nodesG) return;
+  
+  edgesG.innerHTML = ''; nodesG.innerHTML = ''; labelsG.innerHTML = ''; overlaysG.innerHTML = '';
+
+  const W = 800, H = 500, PAD = 60;
+  
+  const visited = state.inspected_nodes || [];
+  const quarantined = Object.keys(state.quarantined_inventory || {});
+  
+  // Safe nodes: those inspected but not quarantined, and where findings indicate all safe. 
+  // For simplicity, we just mark inspected nodes with 0 unsafe lots as safe.
+  const safe = [];
+  Object.entries(state.inspection_results || {}).forEach(([nodeId, findings]) => {
+      let isSafe = true;
+      Object.values(findings).forEach(f => {
+          if (f.unsafe_quantity > 0) isSafe = false;
+      });
+      if (isSafe && !quarantined.includes(nodeId)) safe.push(nodeId);
+  });
+
+  // Draw edges
+  edges.forEach(e => {
+    const from = nodes.find(n=>n.id===e.from);
+    const to = nodes.find(n=>n.id===e.to);
+    if (!from||!to) return;
+    const x1=PAD+from.x*(W-2*PAD), y1=PAD+from.y*(H-2*PAD);
+    const x2=PAD+to.x*(W-2*PAD), y2=PAD+to.y*(H-2*PAD);
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1',x1); line.setAttribute('y1',y1);
+    line.setAttribute('x2',x2); line.setAttribute('y2',y2);
+    line.setAttribute('stroke','rgba(255,255,255,0.12)');
+    line.setAttribute('stroke-width','1');
+    line.setAttribute('marker-end','url(#arrowhead)');
+    edgesG.appendChild(line);
+  });
+
+  // Draw nodes
+  nodes.forEach(n => {
+    const cx=PAD+n.x*(W-2*PAD), cy=PAD+n.y*(H-2*PAD), r=22;
+    const isVisited = visited.includes(n.id);
+    const isQuarantined = quarantined.includes(n.id);
+    const isSafe = safe.includes(n.id);
+
+    // Node circle
+    const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    circle.setAttribute('cx',cx); circle.setAttribute('cy',cy); circle.setAttribute('r',r);
+    let fill='#21262d', stroke='#444c56', sw='1.5';
+    if (isQuarantined) { fill='#da3633'; stroke='#ff6b6b'; sw='3'; }
+    else if (isSafe) { fill='#1a3a2a'; stroke='#2ea043'; sw='2.5'; }
+    else if (isVisited) { fill='#2d2a1a'; stroke='#f0c040'; sw='2.5'; }
+    circle.setAttribute('fill',fill); circle.setAttribute('stroke',stroke); circle.setAttribute('stroke-width',sw);
+    if(isQuarantined) circle.setAttribute('filter','url(#glow)');
+    nodesG.appendChild(circle);
+
+    // Icons
+    if (isQuarantined) {
+      const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
+      txt.setAttribute('x',cx); txt.setAttribute('y',cy+5);
+      txt.setAttribute('text-anchor','middle'); txt.setAttribute('fill','white');
+      txt.setAttribute('font-size','16'); txt.setAttribute('font-weight','bold');
+      txt.textContent = '✖'; nodesG.appendChild(txt);
+    } else if (isSafe) {
+      const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
+      txt.setAttribute('x',cx); txt.setAttribute('y',cy+5);
+      txt.setAttribute('text-anchor','middle'); txt.setAttribute('fill','#2ea043');
+      txt.setAttribute('font-size','15'); txt.setAttribute('font-weight','bold');
+      txt.textContent = '✔'; nodesG.appendChild(txt);
+    }
+
+    // Label
+    const label = document.createElementNS('http://www.w3.org/2000/svg','text');
+    label.setAttribute('x',cx); label.setAttribute('y',cy+r+16);
+    label.setAttribute('text-anchor','middle'); label.setAttribute('fill','#e8edf5');
+    label.setAttribute('font-size','10'); label.setAttribute('font-weight','600');
+    label.setAttribute('font-family','Inter, sans-serif');
+    label.textContent = n.label; labelsG.appendChild(label);
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Init
 // ---------------------------------------------------------------------------
 fetchTasks();

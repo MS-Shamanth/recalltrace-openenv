@@ -1,15 +1,20 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>RecallTrace — Causal Inference via Adversarial Self-Play</title>
-  <meta name="description" content="An RL agent that learns to infer hidden causal interventions in supply-chain contamination through adversarial self-play. Built for Meta PyTorch OpenEnv Hackathon.">
+  <meta name="description"
+    content="An RL agent that learns to infer hidden causal interventions in supply-chain contamination through adversarial self-play. Built for Meta PyTorch OpenEnv Hackathon.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
   <link rel="stylesheet" href="/static/styles.css?v=12">
 </head>
+
 <body>
   <!-- Particle canvas background -->
   <canvas id="particles-canvas"></canvas>
@@ -25,8 +30,8 @@
           </h1>
           <p class="hero-subtitle animate-in delay-2">Causal Inference via Adversarial Self-Play</p>
           <p class="hero-desc animate-in delay-3">
-            An RL agent that doesn't just detect contamination — it infers the 
-            <strong>hidden causal intervention</strong> behind it. Trained via adversarial 
+            An RL agent that doesn't just detect contamination — it infers the
+            <strong>hidden causal intervention</strong> behind it. Trained via adversarial
             self-play where an adversary learns to hide better as the investigator reasons better.
           </p>
           <div class="hero-stats animate-in delay-4">
@@ -91,6 +96,9 @@
       <button class="tab-btn" data-tab="openenv" onclick="switchTab('openenv')">
         <span class="tab-icon">⚡</span> OpenEnv Runner
       </button>
+      <button class="tab-btn" data-tab="manual" onclick="switchTab('manual')">
+        <span class="tab-icon">🕹️</span> Manual Mode
+      </button>
       <button class="tab-btn" data-tab="about" onclick="switchTab('about')">
         <span class="tab-icon">📖</span> About
       </button>
@@ -109,28 +117,28 @@
             <svg id="graph-svg" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid meet">
               <defs>
                 <filter id="glow">
-                  <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+                  <feGaussianBlur stdDeviation="3" result="coloredBlur" />
                   <feMerge>
-                    <feMergeNode in="coloredBlur"/>
-                    <feMergeNode in="SourceGraphic"/>
+                    <feMergeNode in="coloredBlur" />
+                    <feMergeNode in="SourceGraphic" />
                   </feMerge>
                 </filter>
                 <filter id="glow-strong">
-                  <feGaussianBlur stdDeviation="6" result="coloredBlur"/>
+                  <feGaussianBlur stdDeviation="6" result="coloredBlur" />
                   <feMerge>
-                    <feMergeNode in="coloredBlur"/>
-                    <feMergeNode in="SourceGraphic"/>
+                    <feMergeNode in="coloredBlur" />
+                    <feMergeNode in="SourceGraphic" />
                   </feMerge>
                 </filter>
                 <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                  <polygon points="0 0, 10 3.5, 0 7" fill="rgba(255,255,255,0.2)"/>
+                  <polygon points="0 0, 10 3.5, 0 7" fill="rgba(255,255,255,0.2)" />
                 </marker>
                 <marker id="arrowhead-active" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
-                  <polygon points="0 0, 10 3.5, 0 7" fill="#58a6ff"/>
+                  <polygon points="0 0, 10 3.5, 0 7" fill="#58a6ff" />
                 </marker>
                 <linearGradient id="contam-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" style="stop-color:#ff6b6b;stop-opacity:0.4"/>
-                  <stop offset="100%" style="stop-color:#da3633;stop-opacity:0.1"/>
+                  <stop offset="0%" style="stop-color:#ff6b6b;stop-opacity:0.4" />
+                  <stop offset="100%" style="stop-color:#da3633;stop-opacity:0.1" />
                 </linearGradient>
               </defs>
               <g id="graph-edges"></g>
@@ -140,10 +148,14 @@
             </svg>
             <!-- Legend -->
             <div class="graph-legend">
-              <div class="legend-item"><span class="legend-dot" style="background:#21262d;border:2px solid #444c56"></span> Unvisited</div>
-              <div class="legend-item"><span class="legend-dot" style="background:#2d2a1a;border:2px solid #f0c040"></span> Visited</div>
-              <div class="legend-item"><span class="legend-dot" style="background:#da3633;border:2px solid #ff6b6b"></span> Quarantined</div>
-              <div class="legend-item"><span class="legend-dot" style="background:#1a3a2a;border:2px solid #2ea043"></span> Safe</div>
+              <div class="legend-item"><span class="legend-dot"
+                  style="background:#21262d;border:2px solid #444c56"></span> Unvisited</div>
+              <div class="legend-item"><span class="legend-dot"
+                  style="background:#2d2a1a;border:2px solid #f0c040"></span> Visited</div>
+              <div class="legend-item"><span class="legend-dot"
+                  style="background:#da3633;border:2px solid #ff6b6b"></span> Quarantined</div>
+              <div class="legend-item"><span class="legend-dot"
+                  style="background:#1a3a2a;border:2px solid #2ea043"></span> Safe</div>
               <div class="legend-item"><span class="legend-ring"></span> Hidden contamination</div>
             </div>
           </div>
@@ -260,8 +272,8 @@
             <div class="panel-badge" id="llm-status-badge">Checking GPU...</div>
           </div>
           <p class="llm-desc">
-            Watch the <strong>fine-tuned Qwen2.5-0.5B</strong> model investigate a supply-chain 
-            contamination in real-time. The model was trained via SFT on 3,500 expert demonstrations 
+            Watch the <strong>fine-tuned Qwen2.5-0.5B</strong> model investigate a supply-chain
+            contamination in real-time. The model was trained via SFT on 3,500 expert demonstrations
             using <a href="https://github.com/unslothai/unsloth" target="_blank">Unsloth</a> + TRL.
           </p>
           <div class="llm-controls">
@@ -273,7 +285,9 @@
             </button>
           </div>
           <div class="progress-container hidden" id="llm-progress">
-            <div class="progress-bar"><div class="progress-fill" id="llm-progress-fill"></div></div>
+            <div class="progress-bar">
+              <div class="progress-fill" id="llm-progress-fill"></div>
+            </div>
             <span class="progress-text" id="llm-progress-text">Loading model...</span>
           </div>
         </div>
@@ -359,7 +373,9 @@
       </div>
       <!-- Summary Card -->
       <div class="panel glass-panel summary-panel hidden" id="training-summary">
-        <div class="panel-header"><h2>Training Summary</h2></div>
+        <div class="panel-header">
+          <h2>Training Summary</h2>
+        </div>
         <div class="summary-row" id="training-summary-content"></div>
       </div>
     </section>
@@ -432,6 +448,69 @@
       </div>
     </section>
 
+    <!-- ===== MANUAL MODE TAB ===== -->
+    <section class="tab-content" id="tab-manual">
+      <div class="sim-grid">
+        <!-- Left: Controls & Logs -->
+        <div class="panel glass-panel">
+          <div class="panel-header">
+            <h2>Investigation Controls</h2>
+            <button class="action-btn" onclick="initManualMode()">Reset Environment</button>
+          </div>
+          <div class="manual-controls">
+            <div class="input-group">
+              <label>Action</label>
+              <select id="manual-action" onchange="updateManualTargets()">
+                <option value="inspect_node">Inspect Node</option>
+                <option value="trace_lot">Trace Lot</option>
+                <option value="quarantine">Quarantine Node</option>
+                <option value="notify">Notify Node</option>
+                <option value="finalize">Finalize Investigation</option>
+              </select>
+            </div>
+            <div class="input-group">
+              <label>Target</label>
+              <select id="manual-target">
+                <!-- Populated dynamically -->
+              </select>
+            </div>
+            <button class="action-btn" onclick="executeManualAction()">Execute Action</button>
+          </div>
+          <div class="panel-header" style="margin-top: 1.5rem;">
+            <h2>Live Log</h2>
+          </div>
+          <div id="manual-log" class="action-log">
+            <div class="log-item">Click "Reset Environment" to start.</div>
+          </div>
+        </div>
+
+        <!-- Right: Real-time Graph -->
+        <div class="panel glass-panel">
+          <div class="panel-header">
+            <h2>Real-Time Supply Chain</h2>
+            <div class="panel-badge" id="manual-status-badge">Ready</div>
+          </div>
+          <div class="graph-container">
+            <svg id="manual-graph-svg" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid meet">
+              <defs>
+                <!-- Reuse filters and markers from Simulation Tab -->
+              </defs>
+              <g id="manual-graph-edges"></g>
+              <g id="manual-graph-nodes"></g>
+              <g id="manual-graph-labels"></g>
+              <g id="manual-graph-overlays"></g>
+            </svg>
+            <div class="graph-legend">
+              <div class="legend-item"><span class="legend-dot" style="background:#21262d;border:2px solid #444c56"></span> Unvisited</div>
+              <div class="legend-item"><span class="legend-dot" style="background:#2d2a1a;border:2px solid #f0c040"></span> Visited</div>
+              <div class="legend-item"><span class="legend-dot" style="background:#1a3a2a;border:2px solid #2ea043"></span> Safe</div>
+              <div class="legend-item"><span class="legend-dot" style="background:#da3633;border:2px solid #ff6b6b"></span> Quarantined</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- ===== ABOUT TAB ===== -->
     <section class="tab-content" id="tab-about">
       <div class="about-grid">
@@ -443,22 +522,26 @@
             <div class="about-card">
               <div class="about-icon">🔍</div>
               <h3>The Investigator</h3>
-              <p>Inspects nodes, traces lineages, and cross-references data to find contamination. Rewarded +2.0 for correct quarantines, penalized -1.5 for false positives.</p>
+              <p>Inspects nodes, traces lineages, and cross-references data to find contamination. Rewarded +2.0 for
+                correct quarantines, penalized -1.5 for false positives.</p>
             </div>
             <div class="about-card">
               <div class="about-icon">🎭</div>
               <h3>The Adversary</h3>
-              <p>Chooses intervention types (relabeling, mixing, deletion) and placements to maximize Investigator failure. Learns which strategies cause the most confusion.</p>
+              <p>Chooses intervention types (relabeling, mixing, deletion) and placements to maximize Investigator
+                failure. Learns which strategies cause the most confusion.</p>
             </div>
             <div class="about-card">
               <div class="about-icon">🧠</div>
               <h3>Causal Inference</h3>
-              <p>30-50% of graph edges are hidden. The agent must perform abductive reasoning to identify which hidden intervention produced the contamination pattern.</p>
+              <p>30-50% of graph edges are hidden. The agent must perform abductive reasoning to identify which hidden
+                intervention produced the contamination pattern.</p>
             </div>
             <div class="about-card">
               <div class="about-icon">⚔️</div>
               <h3>Self-Play</h3>
-              <p>The environment's difficulty is not static. The adversary adapts its curriculum based on the investigator's failure modes — creating an ever-harder challenge.</p>
+              <p>The environment's difficulty is not static. The adversary adapts its curriculum based on the
+                investigator's failure modes — creating an ever-harder challenge.</p>
             </div>
           </div>
         </div>
@@ -471,12 +554,14 @@
             <div class="theme-card">
               <span class="theme-tag orange">Theme 3.1</span>
               <h3>World Modeling</h3>
-              <p>Belief state tracking with P(contaminated) per node. Agent maintains probabilistic world model and reasons under uncertainty.</p>
+              <p>Belief state tracking with P(contaminated) per node. Agent maintains probabilistic world model and
+                reasons under uncertainty.</p>
             </div>
             <div class="theme-card">
               <span class="theme-tag teal">Theme 4</span>
               <h3>Recursive Skill Amplification</h3>
-              <p>Adversarial self-play creates an automatic difficulty curriculum. Both agents improve simultaneously in a co-evolutionary loop.</p>
+              <p>Adversarial self-play creates an automatic difficulty curriculum. Both agents improve simultaneously in
+                a co-evolutionary loop.</p>
             </div>
           </div>
         </div>
@@ -516,4 +601,5 @@
 
   <script src="/static/app.js?v=12"></script>
 </body>
+
 </html>
