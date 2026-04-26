@@ -857,3 +857,95 @@ select option { background: #0d1525; }
   .ds-modal-body { padding: 16px; }
 }
 
+/* ===== DATASET RESULTS UI ===== */
+.ds-result-card {
+  background: rgba(20, 25, 35, 0.4);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 16px 20px;
+  margin-bottom: 14px;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+.ds-result-card:hover {
+  background: rgba(25, 30, 42, 0.6);
+  border-color: rgba(255,255,255,0.15);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+.ds-result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  border-bottom: 1px dashed rgba(255,255,255,0.06);
+  padding-bottom: 12px;
+}
+.ds-result-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ds-scenario-id {
+  font-family: var(--mono);
+  font-weight: 800;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.ds-result-title strong {
+  font-size: 1.05rem;
+  color: var(--text);
+  letter-spacing: 0.2px;
+}
+.ds-result-tags {
+  display: flex;
+  gap: 8px;
+}
+.ds-result-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 12px;
+}
+.ds-metric {
+  background: rgba(0,0,0,0.2);
+  border: 1px solid rgba(255,255,255,0.04);
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+.ds-metric-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+.ds-metric-val {
+  font-family: var(--mono);
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text);
+}
+.ds-metric-good {
+  background: rgba(46, 160, 67, 0.08);
+  border-color: rgba(46, 160, 67, 0.2);
+}
+.ds-metric-good .ds-metric-val { color: var(--accent2); }
+
+.ds-metric-warn {
+  background: rgba(240, 192, 64, 0.08);
+  border-color: rgba(240, 192, 64, 0.2);
+}
+.ds-metric-warn .ds-metric-val { color: var(--amber); }
+
+.ds-metric-bad {
+  background: rgba(218, 54, 51, 0.08);
+  border-color: rgba(218, 54, 51, 0.2);
+}
+.ds-metric-bad .ds-metric-val { color: var(--red); }
+

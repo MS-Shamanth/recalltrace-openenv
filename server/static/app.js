@@ -1075,18 +1075,43 @@ function renderDatasetResults(data) {
     badge.textContent = (data.dataset_type || 'evaluation').toUpperCase();
   }
   
-  listEl.innerHTML = data.results.map(r => `
-    <div class="log-step">
-      <div class="log-title">
-        <strong>${r.description}</strong>
-        <span class="action-chip">${(r.intervention_type || '').replace(/_/g,' ')}</span>
-        <span class="action-chip" style="background:rgba(88,166,255,0.15);color:#58a6ff">${(r.graph_region || '').replace(/_/g,' ')}</span>
+  listEl.innerHTML = data.results.map(r => {
+    let f1Class = 'ds-metric-warn';
+    if (r.f1 >= 0.85) f1Class = 'ds-metric-good';
+    else if (r.f1 <= 0.5) f1Class = 'ds-metric-bad';
+    
+    return `
+    <div class="ds-result-card">
+      <div class="ds-result-header">
+        <div class="ds-result-title">
+          <span class="ds-scenario-id">#${r.scenario_index}</span>
+          <strong>${r.description}</strong>
+        </div>
+        <div class="ds-result-tags">
+          <span class="theme-tag orange">${(r.intervention_type || '').replace(/_/g,' ')}</span>
+          <span class="theme-tag teal">${(r.graph_region || '').replace(/_/g,' ')}</span>
+        </div>
       </div>
-      <div class="action-meta">
-        <div>F1: ${r.f1.toFixed(3)} | Reward: ${r.reward.toFixed(3)} | Steps: ${r.steps} | Quarantined: ${r.nodes_quarantined}</div>
+      <div class="ds-result-metrics">
+        <div class="ds-metric ${f1Class}">
+          <span class="ds-metric-label">F1 Score</span>
+          <span class="ds-metric-val">${r.f1.toFixed(3)}</span>
+        </div>
+        <div class="ds-metric">
+          <span class="ds-metric-label">Reward</span>
+          <span class="ds-metric-val">${r.reward.toFixed(2)}</span>
+        </div>
+        <div class="ds-metric">
+          <span class="ds-metric-label">Steps</span>
+          <span class="ds-metric-val">${r.steps}</span>
+        </div>
+        <div class="ds-metric">
+          <span class="ds-metric-label">Quarantined</span>
+          <span class="ds-metric-val">${r.nodes_quarantined}</span>
+        </div>
       </div>
     </div>
-  `).join('');
+  `}).join('');
   
   resultsDiv.classList.remove('hidden');
   document.getElementById('llm-results').classList.add('hidden');
