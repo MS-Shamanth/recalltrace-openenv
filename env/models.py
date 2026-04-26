@@ -5,12 +5,16 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+import math
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
 class ActionType(str, Enum):
     INSPECT_NODE = "inspect_node"
     TRACE_LOT = "trace_lot"
+    CROSS_REFERENCE = "cross_reference"
+    REQUEST_LAB_TEST = "request_lab_test"
     QUARANTINE = "quarantine"
     NOTIFY = "notify"
     FINALIZE = "finalize"
@@ -77,6 +81,12 @@ class RecallObservation(BaseModel):
     trace_results: Dict[str, Dict[str, Any]]
     notified_nodes: List[str]
     quarantined_inventory: Dict[str, Dict[str, int]]
+    belief_state: Dict[str, float] = Field(default_factory=dict)
+    risk_summary: Dict[str, Any] = Field(default_factory=dict)
+    root_cause_candidates: List[str] = Field(default_factory=list)
+    root_cause_confidence: Dict[str, float] = Field(default_factory=dict)
+    information_gain: float = Field(default=0.0)
+    contamination_metrics: Dict[str, Any] = Field(default_factory=dict)
     history: List[str]
     steps_taken: int = Field(ge=0)
     remaining_step_budget: int = Field(ge=0)
@@ -91,6 +101,7 @@ class StepInfo(BaseModel):
     action_type: str
     score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     reward_breakdown: Dict[str, float] = Field(default_factory=dict)
+    contamination_metrics: Dict[str, Any] = Field(default_factory=dict)
 
 
 class EnvironmentState(BaseModel):
@@ -117,3 +128,18 @@ class TaskGrade(BaseModel):
     max_steps: int = Field(ge=1)
     reward_total: float
     final_info: Dict[str, Any]
+
+
+# ---------------------------------------------------------------------------
+# Utility: Entropy computation for information gain tracking
+# ---------------------------------------------------------------------------
+
+def belief_entropy(beliefs: Dict[str, float]) -> float:
+    """Compute Shannon entropy of the belief state distribution."""
+    if not beliefs:
+        return 0.0
+    total = 0.0
+    for p in beliefs.values():
+        p_clamped = max(1e-9, min(1.0 - 1e-9, p))
+        total -= p_clamped * math.log2(p_clamped) + (1 - p_clamped) * math.log2(1 - p_clamped)
+    return total

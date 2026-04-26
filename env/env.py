@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, List, Tuple
 
-from env.models import EnvironmentState, InspectionEvidence, RecallAction, RecallObservation, RewardSignal, StepInfo, TaskDefinition
+from env.models import EnvironmentState, InspectionEvidence, RecallAction, RecallObservation, RewardSignal, StepInfo, TaskDefinition, belief_entropy
 from scenario.scenario import build_scenario, list_task_specs
 
 
@@ -15,6 +15,8 @@ class RecallTraceEnv:
     ACTIONS = [
         "inspect_node",
         "trace_lot",
+        "cross_reference",
+        "request_lab_test",
         "quarantine",
         "notify",
         "finalize",
@@ -30,6 +32,16 @@ class RecallTraceEnv:
         self.task = self._build_task_definition(self._scenario_template)
         self.state_data: Dict[str, Any] = {}
         self.ground_truth: Dict[str, Any] = {}
+        self._root_lot_index: Dict[str, str] = {}
+        self._related_lots_index: Dict[str, set[str]] = {}
+        self._lot_nodes_index: Dict[str, List[str]] = {}
+        self._affected_nodes_set: set[str] = set()
+        self._affected_roots_set: set[str] = set()
+        self._contaminated_descendants: Dict[str, set[str]] = {}
+        self._cached_risk_summary: Dict[str, Any] | None = None
+        self._risk_summary_dirty = True
+        self._prev_belief_entropy: float = 0.0
+        self._cumulative_info_gain: float = 0.0
         self.done = False
         self.last_reward = RewardSignal(value=0.0, reason="Environment initialized.", components={})
 
@@ -60,12 +72,27 @@ class RecallTraceEnv:
             "inspected_nodes": set(),
             "inspection_results": {},
             "traced_lots": {},
+            "cross_references": {},
+            "lab_results": {},
             "notified_nodes": set(),
             "quarantine_log": [],
+            "belief_state": {},
+            "root_cause_candidates": [],
+            "root_cause_confidence": {},
+            "contamination_metrics": {"initial_contaminated": 0, "current_contaminated": 0, "decontamination_rate": 0.0},
             "steps_taken": 0,
             "max_steps": scenario["max_steps"],
         }
         self.ground_truth = self._build_ground_truth(scenario)
+        self._rebuild_indexes()
+        self._risk_summary_dirty = True
+        self._prev_belief_entropy = 0.0
+        self._cumulative_info_gain = 0.0
+        self._refresh_belief_state()
+        # Set initial contamination count
+        initial_count = len(self.ground_truth.get("affected_nodes", []))
+        self.state_data["contamination_metrics"]["initial_contaminated"] = initial_count
+        self.state_data["contamination_metrics"]["current_contaminated"] = initial_count
         return self._get_observation()
 
     def step(self, action: RecallAction | Dict[str, Any]) -> Tuple[RecallObservation, float, bool, Dict[str, Any]]:
@@ -100,6 +127,7 @@ class RecallTraceEnv:
             self._record_history("Episode terminated after exhausting the step budget")
             self.last_reward = reward_signal
 
+        self._refresh_belief_state()
         return self._get_observation(), reward_signal.value, self.done, info
 
     def state(self) -> EnvironmentState:
@@ -125,6 +153,12 @@ class RecallTraceEnv:
             trace_results=deepcopy(self.state_data["traced_lots"]),
             notified_nodes=sorted(self.state_data["notified_nodes"]),
             quarantined_inventory=self._quarantine_snapshot(),
+            belief_state=deepcopy(self.state_data["belief_state"]),
+            risk_summary=self._risk_summary(),
+            root_cause_candidates=list(self.state_data["root_cause_candidates"]),
+            root_cause_confidence=deepcopy(self.state_data.get("root_cause_confidence", {})),
+            information_gain=round(self._cumulative_info_gain, 4),
+            contamination_metrics=deepcopy(self.state_data.get("contamination_metrics", {})),
             history=list(self.state_data["history"]),
             steps_taken=self.state_data["steps_taken"],
             remaining_step_budget=max(0, self.state_data["max_steps"] - self.state_data["steps_taken"]),
@@ -142,6 +176,9 @@ class RecallTraceEnv:
             for lot_id, payload in node.get("inspection_findings", {}).items()
         }
         self.state_data["inspection_results"][node_id] = findings
+        for lot_id, finding in findings.items():
+            if finding.unsafe_quantity > 0:
+                self._remember_root_cause(self._derive_root_cause(lot_id, finding.model_dump()), confidence=0.8)
         self._record_history(f"Inspected node {node_id}")
 
         unsafe_total = sum(item.unsafe_quantity for item in findings.values())
@@ -181,7 +218,13 @@ class RecallTraceEnv:
         impacted_lots = {}
         discovered_nodes = 0
 
-        for node_id, node_data in self.state_data["nodes"].items():
+        candidate_nodes = sorted({
+            node_id
+            for candidate_lot in traced_lots
+            for node_id in self._lot_nodes_index.get(candidate_lot, [])
+        })
+        for node_id in candidate_nodes:
+            node_data = self.state_data["nodes"][node_id]
             node_total = 0
             node_lots = []
             for candidate_lot in traced_lots:
@@ -197,6 +240,10 @@ class RecallTraceEnv:
                 impacted_lots[node_id] = node_lots
                 if node_id not in self.state_data["discovered_shipments"]:
                     discovered_nodes += 1
+                for candidate_lot in node_lots:
+                    finding = node_data.get("inspection_findings", {}).get(candidate_lot)
+                    if finding and int(finding.get("unsafe_quantity", 0)) > 0:
+                        self._remember_root_cause(self._derive_root_cause(candidate_lot, finding), confidence=0.7)
 
         self.state_data["traced_lots"][lot_id] = {
             "root_lot": self._root_lot_for(lot_id),
@@ -238,6 +285,123 @@ class RecallTraceEnv:
                 "lots_by_node": impacted_lots,
                 "quantities_by_node": impacted_quantities,
                 "total_quantity": sum(impacted_quantities.values()),
+                "root_cause_candidates": list(self.state_data["root_cause_candidates"]),
+            }
+        )
+        return reward, info
+
+    def _handle_cross_reference(self, action: RecallAction) -> tuple[RewardSignal, Dict[str, Any]]:
+        lot_id = action.lot_id or self.state_data["contaminated_lot_hint"]
+        root_lot = self._root_lot_for(lot_id)
+        matched_lots = sorted(self._resolve_related_lots(lot_id))
+        affected_nodes = sorted({
+            node_id
+            for matched_lot in matched_lots
+            for node_id in self._lot_nodes_index.get(matched_lot, [])
+        })
+
+        node_id = action.node_id
+        if node_id:
+            node_id = self._require_node(node_id)
+            affected_nodes = [candidate for candidate in affected_nodes if candidate == node_id]
+
+        evidence_statuses: Dict[str, int] = {}
+        root_causes: set[str] = set()
+        for candidate_node in affected_nodes or self._lot_nodes_index.get(lot_id, []):
+            findings = self.state_data["nodes"][candidate_node].get("inspection_findings", {})
+            for matched_lot in matched_lots:
+                finding = findings.get(matched_lot)
+                if not finding:
+                    continue
+                status = str(finding.get("status", "unknown"))
+                evidence_statuses[status] = evidence_statuses.get(status, 0) + 1
+                if int(finding.get("unsafe_quantity", 0)) > 0:
+                    root_causes.add(self._derive_root_cause(matched_lot, finding))
+
+        for cause in sorted(root_causes):
+            self._remember_root_cause(cause, confidence=0.7)
+
+        repeated = lot_id in self.state_data["cross_references"]
+        self.state_data["cross_references"][lot_id] = {
+            "root_lot": root_lot,
+            "matched_lots": matched_lots,
+            "affected_nodes": affected_nodes,
+            "evidence_statuses": evidence_statuses,
+            "root_cause_candidates": sorted(root_causes),
+        }
+        self._record_history(f"Cross-referenced {lot_id} against lot lineage and inspection evidence")
+
+        is_recall_lineage = root_lot in self._affected_roots_set
+        value = (0.14 if is_recall_lineage else 0.02) + min(0.1, 0.02 * len(affected_nodes))
+        if repeated:
+            value -= 0.08
+        reward = RewardSignal(
+            value=round(max(-0.05, min(0.28, value)), 4),
+            reason="Cross-reference connected lot lineage, graph placement, and root-cause evidence.",
+            components={"cross_reference_value": round(max(-0.05, min(0.28, value)), 4)},
+        )
+        info = StepInfo(
+            message=f"Cross-referenced {lot_id} across lineage and graph records.",
+            action_type=action.type.value,
+            reward_breakdown=reward.components,
+        ).model_dump()
+        info.update(self.state_data["cross_references"][lot_id])
+        info.update({"lot_id": lot_id})
+        return reward, info
+
+    def _handle_request_lab_test(self, action: RecallAction) -> tuple[RewardSignal, Dict[str, Any]]:
+        node_id = self._require_node(action.node_id)
+        node = self.state_data["nodes"][node_id]
+        lot_id = action.lot_id
+        if not lot_id:
+            candidate_lots = list(node.get("inspection_findings", {}).keys()) or list(node["inventory"].keys())
+            if not candidate_lots:
+                raise ValueError("request_lab_test requires 'lot_id' when the node has no inventory.")
+            lot_id = max(
+                candidate_lots,
+                key=lambda candidate: node.get("inspection_findings", {}).get(candidate, {}).get("unsafe_quantity", 0),
+            )
+        if lot_id not in node["inventory"] and lot_id not in node.get("inspection_findings", {}):
+            raise ValueError(f"Lot '{lot_id}' is not present in node '{node_id}'.")
+
+        finding_payload = node.get("inspection_findings", {}).get(
+            lot_id,
+            {
+                "status": "not_detected",
+                "unsafe_quantity": 0,
+                "evidence": "Lab panel found no matching recall signal for this lot at this node.",
+            },
+        )
+        finding = InspectionEvidence.model_validate(finding_payload)
+        self.state_data["lab_results"].setdefault(node_id, {})[lot_id] = finding
+        self.state_data["inspection_results"].setdefault(node_id, {})[lot_id] = finding
+
+        if finding.unsafe_quantity > 0:
+            cause = self._derive_root_cause(lot_id, finding.model_dump())
+            self._remember_root_cause(cause, confidence=0.9)
+            reward_value = 0.2
+            reason = "Lab test confirmed unsafe stock and strengthened root-cause evidence."
+        else:
+            reward_value = 0.03
+            reason = "Lab test ruled out a candidate lot and reduced false-positive risk."
+
+        self._record_history(f"Requested lab test for {lot_id} at {node_id}")
+        reward = RewardSignal(
+            value=round(reward_value, 4),
+            reason=reason,
+            components={"lab_test_value": round(reward_value, 4)},
+        )
+        info = StepInfo(
+            message=f"Lab test completed for {lot_id} at {node_id}.",
+            action_type=action.type.value,
+            reward_breakdown=reward.components,
+        ).model_dump()
+        info.update(
+            {
+                "node_id": node_id,
+                "lot_id": lot_id,
+                "lab_result": finding.model_dump(),
+                "root_cause_candidates": list(self.state_data["root_cause_candidates"]),
             }
         )
         return reward, info
@@ -274,6 +438,7 @@ class RecallTraceEnv:
 
         self.state_data["quarantine_log"].append({"node_id": node_id, "lot_id": lot_id, "quantity": quarantined_qty})
         self._record_history(f"Quarantined {quarantined_qty} units of {lot_id} at {node_id}")
+        self._risk_summary_dirty = True  # Invalidate cache after quarantine change
 
         correct_qty = self.ground_truth["correct_quantities"].get(node_id, {}).get(lot_id, 0)
         cumulative_quarantined = node["quarantined_inventory"].get(lot_id, 0)
@@ -314,8 +479,18 @@ class RecallTraceEnv:
                 "remaining_inventory": node["inventory"].get(lot_id, 0),
                 "cumulative_quarantined": cumulative_quarantined,
                 "target_contaminated_quantity": correct_qty,
+                "containment_progress": self._risk_summary()["containment_progress"],
             }
         )
+        # Update contamination decay metrics
+        qm = self._compute_quarantine_match()
+        remaining = len(qm.get("missing_quantities", {}))
+        initial = self.state_data["contamination_metrics"]["initial_contaminated"] or 1
+        self.state_data["contamination_metrics"]["current_contaminated"] = remaining
+        self.state_data["contamination_metrics"]["decontamination_rate"] = round(
+            max(0.0, 1.0 - remaining / initial), 4
+        )
+        info["contamination_metrics"] = deepcopy(self.state_data["contamination_metrics"])
         return reward, info
 
     def _handle_notify(self, action: RecallAction) -> tuple[RewardSignal, Dict[str, Any]]:
@@ -480,6 +655,121 @@ class RecallTraceEnv:
             "over_quarantined_quantities": over_quarantined_quantities,
         }
 
+    def _rebuild_indexes(self) -> None:
+        lot_catalog = self.state_data.get("lot_catalog", {})
+        self._root_lot_index = {
+            lot_id: payload.get("root_lot", lot_id)
+            for lot_id, payload in lot_catalog.items()
+        }
+        self._related_lots_index = {}
+        for lot_id, root_lot in self._root_lot_index.items():
+            self._related_lots_index.setdefault(root_lot, set()).add(lot_id)
+            self._related_lots_index[lot_id] = self._related_lots_index[root_lot]
+
+        lot_nodes: Dict[str, set[str]] = {}
+        for node_id, node_data in self.state_data.get("nodes", {}).items():
+            lots = set(node_data.get("inventory", {})) | set(node_data.get("quarantined_inventory", {}))
+            lots |= set(node_data.get("inspection_findings", {}))
+            for lot_id in lots:
+                lot_nodes.setdefault(lot_id, set()).add(node_id)
+        self._lot_nodes_index = {
+            lot_id: sorted(nodes)
+            for lot_id, nodes in lot_nodes.items()
+        }
+        self._affected_nodes_set = set(self.ground_truth.get("affected_nodes", []))
+        self._affected_roots_set = set(self.ground_truth.get("affected_roots", []))
+
+        # Pre-compute contaminated lot descendant chains for O(1) lineage lookups
+        self._contaminated_descendants = {}
+        for lot_id, payload in lot_catalog.items():
+            if payload.get("contaminated", False):
+                root = payload.get("root_lot", lot_id)
+                self._contaminated_descendants.setdefault(root, set()).add(lot_id)
+
+    def _refresh_belief_state(self) -> None:
+        recall_root = self._root_lot_for(self.state_data.get("contaminated_lot_hint", ""))
+        traced_nodes = {
+            node_id
+            for trace in self.state_data.get("traced_lots", {}).values()
+            for node_id in trace.get("affected_nodes", [])
+        }
+        beliefs: Dict[str, float] = {}
+
+        for node_id, node_data in self.state_data.get("nodes", {}).items():
+            inventory_lots = set(node_data.get("inventory", {})) | set(node_data.get("quarantined_inventory", {}))
+            score = 0.05
+            if any(self._root_lot_for(lot_id) == recall_root for lot_id in inventory_lots):
+                score = max(score, 0.35)
+            if node_id in traced_nodes:
+                score = max(score, 0.55)
+
+            findings = self.state_data.get("inspection_results", {}).get(node_id, {})
+            if findings:
+                unsafe_score = 0.0
+                safe_only = True
+                for finding in findings.values():
+                    unsafe_qty = finding.unsafe_quantity if hasattr(finding, "unsafe_quantity") else int(finding.get("unsafe_quantity", 0))
+                    status = finding.status if hasattr(finding, "status") else str(finding.get("status", ""))
+                    if unsafe_qty > 0:
+                        safe_only = False
+                        if status == "mixed":
+                            unsafe_score = max(unsafe_score, 0.82)
+                        else:
+                            unsafe_score = max(unsafe_score, 0.95)
+                    elif status not in {"safe", "not_detected"}:
+                        safe_only = False
+                        unsafe_score = max(unsafe_score, 0.3)
+                if unsafe_score:
+                    score = max(score, unsafe_score)
+                elif safe_only:
+                    score = min(score, 0.1)
+
+            expected = self.ground_truth.get("correct_quantities", {}).get(node_id, {})
+            if expected:
+                actual = node_data.get("quarantined_inventory", {})
+                covered = sum(min(actual.get(lot_id, 0), qty) for lot_id, qty in expected.items())
+                total = sum(expected.values()) or 1
+                score *= max(0.05, 1.0 - (covered / total))
+
+            beliefs[node_id] = round(max(0.0, min(0.99, score)), 4)
+
+        self.state_data["belief_state"] = beliefs
+        self._risk_summary_dirty = True
+
+        # Compute information gain (entropy reduction)
+        current_entropy = belief_entropy(beliefs)
+        if self._prev_belief_entropy > 0:
+            gain = max(0.0, self._prev_belief_entropy - current_entropy)
+            self._cumulative_info_gain += gain
+        self._prev_belief_entropy = current_entropy
+
+    def _risk_summary(self) -> Dict[str, Any]:
+        # Return cached result if nothing changed since last computation
+        if not self._risk_summary_dirty and self._cached_risk_summary is not None:
+            return self._cached_risk_summary
+
+        beliefs = self.state_data.get("belief_state", {})
+        high_risk_nodes = [node_id for node_id, score in sorted(beliefs.items(), key=lambda item: item[1], reverse=True) if score >= 0.5]
+        inspected_unsafe_nodes = sorted(
+            node_id
+            for node_id, findings in self.state_data.get("inspection_results", {}).items()
+            if any(finding.unsafe_quantity > 0 for finding in findings.values())
+        )
+        quarantine_match = self._compute_quarantine_match()
+        remaining_nodes = sorted(quarantine_match["missing_quantities"].keys())
+        total_affected = len(self.ground_truth.get("affected_nodes", [])) or 1
+        contained_nodes = total_affected - len(remaining_nodes)
+        result = {
+            "high_risk_nodes": high_risk_nodes,
+            "inspected_unsafe_nodes": inspected_unsafe_nodes,
+            "remaining_suspected_nodes": len(high_risk_nodes),
+            "containment_progress": round(max(0.0, contained_nodes / total_affected), 4),
+            "root_cause_candidates": list(self.state_data.get("root_cause_candidates", [])),
+        }
+        self._cached_risk_summary = result
+        self._risk_summary_dirty = False
+        return result
+
     def _inventory_snapshot(self) -> Dict[str, Dict[str, int]]:
         return {node_id: deepcopy(node_data["inventory"]) for node_id, node_data in self.state_data["nodes"].items()}
 
@@ -492,17 +782,37 @@ class RecallTraceEnv:
 
     def _resolve_related_lots(self, lot_id: str) -> set[str]:
         root_lot = self._root_lot_for(lot_id)
-        return {
-            candidate_lot
-            for candidate_lot in self.state_data["lot_catalog"].keys()
-            if self._root_lot_for(candidate_lot) == root_lot or candidate_lot == lot_id
-        }
+        return set(self._related_lots_index.get(lot_id) or self._related_lots_index.get(root_lot) or {lot_id})
 
     def _root_lot_for(self, lot_id: str, lot_catalog: Dict[str, Dict[str, Any]] | None = None) -> str:
+        if lot_catalog is None and lot_id in self._root_lot_index:
+            return self._root_lot_index[lot_id]
         catalog = lot_catalog or self.state_data.get("lot_catalog", {})
         if lot_id not in catalog:
             return lot_id
         return catalog[lot_id].get("root_lot", lot_id)
+
+    def _derive_root_cause(self, lot_id: str, finding: Dict[str, Any]) -> str:
+        lot_data = self.state_data.get("lot_catalog", {}).get(lot_id, {})
+        status = str(finding.get("status", ""))
+        evidence = str(finding.get("evidence", "")).lower()
+        if status == "mixed" or lot_data.get("mixed_from"):
+            return "mixing_event"
+        if status == "records_missing" or "missing" in evidence or "deleted" in evidence:
+            return "record_deletion"
+        if lot_data.get("relabeled_from") or "relabel" in evidence or "repack" in evidence:
+            return "lot_relabel"
+        return "source_contamination"
+
+    def _remember_root_cause(self, cause: str, confidence: float = 0.5) -> None:
+        candidates = self.state_data.setdefault("root_cause_candidates", [])
+        confidences = self.state_data.setdefault("root_cause_confidence", {})
+        if cause and cause not in candidates:
+            candidates.append(cause)
+            candidates.sort()
+        # Update confidence (keep the maximum observed)
+        if cause:
+            confidences[cause] = round(max(confidences.get(cause, 0.0), confidence), 4)
 
     def _build_task_definition(self, scenario: Dict[str, Any]) -> TaskDefinition:
         return TaskDefinition(

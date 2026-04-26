@@ -34,39 +34,43 @@ They train together. Two hundred episodes. The Adversary discovers on its own th
 
 This is recursive skill amplification — Theme 4's exact language — running inside a world-modeling environment. The benchmark doesn't just test the agent. The benchmark teaches itself to be harder.
 
-### [1:10–1:45] Demo Moment
+### [1:10–1:45] The Live Demo & Episode Comparison
 
-Let me show you what the learning actually looks like.
+Let me show you what the learning actually looks like. If you go to our interactive dashboard on Hugging Face Spaces, you can see the **Episode Comparison** tab. 
 
-*[Show before_after_demo.png]*
+*[Show the Episode Comparison Tab]*
 
-Left panel — Episode 5, untrained agent. It visits seven nodes. It quarantines six of them — including four safe nodes. Belief confidence at quarantine: 0.51 average. It's spraying and praying. F1 score: 0.28. It cannot identify the intervention type.
+Here we compare the worst early episode against the best late episode side-by-side. 
+On the left (Early Episode), the agent visits 10 nodes and quarantines 9 of them. It's guessing blindly, resulting in an F1 score of 0.36. 
+On the right (Late Episode), it visits just 3 nodes and quarantines exactly 3 — hitting a perfect F1 score of 1.0. It correctly identifies the intervention as a mixing event *before* it quarantines, while calibrating its threshold perfectly.
 
-Right panel — Episode 195, trained agent. It visits four nodes. It quarantines exactly two — the two that are actually contaminated. Belief confidence: 0.89 and 0.87. It stops investigating when P-contaminated crosses 0.85. F1 score: 0.81. It correctly identifies the intervention as a mixing event *before* it quarantines.
+The agent went from guessing to reasoning. That's a profound behavior change.
 
-The agent went from guessing to reasoning. That's not a metric improvement. That's a behavior change. You can see it without reading a single line of code.
+And we didn't stop at RL. We took these expert demonstrations and used them to fine-tune a 4-bit Large Language Model (`Qwen2.5-0.5B-Instruct`). Under the **🤖 Live LLM Demo** tab, you can watch this LLM investigate graphs in real-time on our live GPU.
 
 ### [1:45–2:15] Results
 
-*[Show selfplay_training.png]*
+### [1:45–2:15] Results
 
-F1 score goes from 0.24 to 0.79 over 200 episodes. Nodes quarantined drops from 8.3 per episode to 3.1. Steps to finalize drops from 25 to 11. The adversary's reward flips from positive — it was winning — to negative — the investigator caught up.
+*[Navigate to the Dashboard's **Co-Evolution** and **Belief Calibration** Tabs]*
 
-Both agents are improving simultaneously. The adversary gets better at hiding. The investigator gets better at finding. The F1 never hits 1.0 because the adversary keeps the problem hard. This is what co-evolutionary training looks like in practice.
+Looking at the interactive dashboard, you can see the underlying engine at work. In the **Co-Evolution** tab, the adversary's reward flips from positive to negative right as the investigator catches up. They improve simultaneously. The F1 never hits 1.0 because the adversary keeps finding harder hiding spots.
 
-The entire loop runs in under one second on CPU. No GPU required. A judge can clone the repo, run `python run_selfplay.py`, and see these plots in sixty seconds.
+In the **Belief Calibration** tab, you see the investigator's confidence (P-contaminated) drop early on as it gets confused, and then sharply rise and stabilize above the quarantine threshold. It learns exactly *when* it has enough evidence to act.
+
+This entire self-play loop ran in under one second on CPU, generating the perfect expert dataset that powers the LLM you just saw.
 
 ### [2:15–2:45] Why This Matters
 
-RecallTrace is not just a benchmark environment. It is a benchmark that evolves.
+RecallTrace is not just a benchmark environment. It is a benchmark that evolves, paired with an inference engine that translates that evolution into a deployable model.
 
 Every domain where a hidden causal intervention creates an observable pattern under partial information — pharmaceutical contamination, financial fraud, biosecurity, network intrusion — can use this framework. You swap the graph topology, you swap the intervention types, and you have a new self-play benchmark for causal reasoning.
 
-We're not submitting an environment. We're submitting an environment design pattern where the curriculum writes itself.
+We're not submitting an environment. We're submitting an environment design pattern where the curriculum writes itself, and the resulting expert data trains a specialized reasoning LLM.
 
 ### [2:45–3:00] Close
 
-We built an agent that learns to reason causally — and an adversary that forces it to keep getting better. The Investigator doesn't just find contamination. It identifies the intervention type, calibrates its confidence, and stops when it's certain. That's not tool use. That's causal inference. And with self-play, it's causal inference that improves recursively.
+We built an agent that learns to reason causally, an adversary that forces it to keep getting better, and a live web dashboard running a fine-tuned LLM that executes that reasoning in real-time. The Investigator doesn't just find contamination. It identifies the intervention type, calibrates its confidence, and stops when it's certain. That's not tool use. That's causal inference. And with self-play, it's causal inference that improves recursively.
 
 RecallTrace. Thank you.
 
@@ -119,3 +123,17 @@ Two hundred episodes in under one second on CPU. No GPU. No external RL librarie
 > RecallTrace is the only submission that implements **recursive skill amplification** (Theme 4) **inside a world-modeling environment** (Theme 3.1) with a working self-play loop that produces visible, measurable behavior change in under sixty seconds on CPU.
 
 The benchmark doesn't just test agents. It teaches itself to be harder. The adversary finds what's difficult. The investigator learns to overcome it. The environment evolves. That's what makes this submission legendary.
+
+---
+
+### RecallTrace Architecture & Environment Flow
+The RecallTrace Hugging Face Space operates as a Python-based Gradio application hosting an OpenEnv-compliant causal inference benchmark. At its core, the system runs a two-agent adversarial self-play loop. In this environment, an **Investigator** must identify and isolate a hidden contamination event within a procedurally generated, partially observable supply graph. An opposing **Adversary** intelligently places these interventions to maximize the Investigator's failure rate. The environment enforces an ungameable, composable reward function that computes a final score based on Recall (catching unsafe nodes), Precision (sparing safe nodes), Belief Calibration (making confident decisions), and Efficiency (using fewer steps). 
+
+### The Adaptive Heuristic Search
+The Heuristic Investigator serves as an interpretable, fast-adapting baseline. Instead of neural networks, this agent uses dynamic, rule-based heuristics governed by learnable thresholds (e.g., quarantine confidence limits and "trust" in ambiguous lab results). After every episode, the agent calculates its F1 score (the harmonic mean of its precision and recall accuracy). If the F1 score dips, the agent adjusts its internal thresholds using an Exponential Moving Average (EMA). This allows the heuristic search to continuously tune its exploration and exploitation strategies dynamically, finding optimal paths through the causal graph with a very low computational footprint.
+
+### The PyTorch RL Agent
+The PyTorch RL Investigator is powered by a Deep Reinforcement Learning policy network. Because the environment's observation space is variable (graphs change size, inventory fluctuates), the architecture utilizes a `StateEncoder` to map the raw observation dictionaries into a fixed 112-dimensional feature tensor. This tensor is fed into a Multi-Layer Perceptron (MLP) equipped with three distinct output heads: an **Action Head** (to select one of the 7 tools), a **Node Head** (to target a specific node), and a **Value Head** (to predict the baseline reward). The model is trained using the **REINFORCE** algorithm. To ensure stable learning, the Value Head serves as a learned baseline to reduce variance, while an underlying entropy regularization coefficient forces the model to maintain exploration, preventing it from collapsing into trivial behaviors like quarantining every node immediately.
+
+### Adversarial Co-Evolution & Plot Generation
+As the Investigator learns, the learning environment dynamically shifts. The Adversary operates using an 18-cell dynamic score table cross-referencing three dimensions: Intervention Type, Graph Region, and Density Bucket. It uses a temperature-scaled Softmax distribution to sample attacks. If the Investigator expertly solves a specific scenario (scoring a high F1), the Adversary penalizes that specific cell in its table, forcing it to try novel attack patterns. Throughout this process, Python's Matplotlib continuously buffers the telemetry data. The **RL F1 Curve** plots the agent's expanding accuracy across episodes. The **RL Training Curve** tracks the underlying REINFORCE policy loss against the agent's reward. Finally, the **Co-Evolution Curve** maps the dual-agent progression, visually demonstrating the "arms race" where the Adversary's success metric dips precisely as the Investigator's capabilities improve.

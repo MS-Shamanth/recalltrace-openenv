@@ -27,6 +27,13 @@ def choose_heuristic_action(observation: RecallObservation) -> RecallAction:
     if trace_result is None:
         return RecallAction(type="trace_lot", lot_id=root_lot, rationale="Map the recall lineage first.")
 
+    if not observation.root_cause_candidates and observation.remaining_step_budget > 2:
+        return RecallAction(
+            type="cross_reference",
+            lot_id=root_lot,
+            rationale="Connect lot lineage, graph placement, and evidence before quarantining.",
+        )
+
     affected_nodes = trace_result.get("affected_nodes", [])
     for node_id in affected_nodes:
         if node_id not in observation.inspected_nodes:

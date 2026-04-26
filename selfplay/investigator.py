@@ -41,6 +41,8 @@ class InvestigatorAgent:
         self.quarantine_decisions: List[Dict[str, Any]] = []
         self.intervention_guess: Optional[str] = None
         self.total_episodes = 0
+        self._did_cross_reference = False
+        self._contamination_curve: List[int] = []
 
         # Adaptation history
         self._f1_history: List[float] = []
@@ -51,6 +53,8 @@ class InvestigatorAgent:
         self.nodes_quarantined = []
         self.quarantine_decisions = []
         self.intervention_guess = None
+        self._did_cross_reference = False
+        self._contamination_curve = []
         self.belief_confidence = max(0.1, min(0.95, 0.1 + self.total_episodes * 0.004))
 
     def act(self, observation: RecallObservation, rng: random.Random | None = None) -> RecallAction:
@@ -74,59 +78,87 @@ class InvestigatorAgent:
                 return RecallAction(type="inspect_node", node_id=node_id,
                                     rationale="Collect evidence.")
 
+        # Step 2.5: Cross-reference before quarantine (root cause identification)
+        if (not self._did_cross_reference
+                and observation.remaining_step_budget > 3
+                and not observation.root_cause_candidates):
+            self._did_cross_reference = True
+            return RecallAction(type="cross_reference", lot_id=root_lot,
+                                rationale="Identify root cause before quarantining.")
+
+        # Step 2.6: Adaptive lab testing for ambiguous evidence
+        if observation.remaining_step_budget > 4:
+            for node_id, findings in observation.inspection_results.items():
+                for lot_id, finding in findings.items():
+                    score = self._assess_evidence(finding)
+                    if 0.3 <= score <= 0.65 and finding.unsafe_quantity == 0:
+                        # Ambiguous — lab test instead of blind quarantine
+                        return RecallAction(type="request_lab_test", node_id=node_id,
+                                            lot_id=lot_id,
+                                            rationale="Resolving ambiguous evidence with lab test.")
+
         # Step 3: Exploration — inspect non-traced nodes (high early, low late)
         if rng.random() < min(self.exploration_rate, 0.95):
             all_nodes = list(observation.inventory.keys())
             uninspected = [n for n in all_nodes if n not in observation.inspected_nodes]
             if uninspected:
+                # Root-cause-driven targeting: prioritize nodes matching the intervention pattern
+                if observation.root_cause_candidates and self.total_episodes > 20:
+                    targeted = self._target_by_root_cause(uninspected, observation)
+                    if targeted:
+                        uninspected = targeted
                 node_id = rng.choice(uninspected)
                 self.nodes_visited.append(node_id)
                 return RecallAction(type="inspect_node", node_id=node_id,
                                     rationale="Exploring non-traced node.")
 
         # Step 4: Quarantine decisions — THIS IS WHERE LEARNING MATTERS
-        # Scan ALL findings and decide what to quarantine based on learned trust
+        # Build and sort candidates by confidence for monotonic contamination decrease
+        quarantine_candidates = []
         for node_id, findings in observation.inspection_results.items():
             for lot_id, finding in findings.items():
                 unsafe_qty = finding.unsafe_quantity
                 quarantined_qty = observation.quarantined_inventory.get(node_id, {}).get(lot_id, 0)
                 available_qty = observation.inventory.get(node_id, {}).get(lot_id, 0)
-
                 if available_qty <= 0:
                     continue
-
-                # Assess evidence using LEARNED trust parameters
                 evidence_score = self._assess_evidence(finding)
-
-                # Skip if below threshold
                 if evidence_score < self.quarantine_threshold:
                     continue
-
-                # Decide quantity to quarantine
                 if unsafe_qty > 0:
                     remaining = unsafe_qty - quarantined_qty
                     if remaining <= 0:
                         continue
                     qty = min(remaining, available_qty)
                 elif evidence_score >= 0.5:
-                    # No stated unsafe_qty but evidence looks suspicious
-                    # Early agent: quarantines these (FPs on decoys!)
-                    # Late agent: threshold filters these out
                     qty = available_qty
                 else:
                     continue
-
-                self.nodes_quarantined.append(node_id)
-                self.quarantine_decisions.append({
+                # Use belief state to boost confidence if available
+                belief = observation.belief_state.get(node_id, 0.5)
+                combined_score = evidence_score * 0.6 + belief * 0.4
+                quarantine_candidates.append({
                     "node_id": node_id, "lot_id": lot_id,
                     "quantity": qty, "confidence": evidence_score,
+                    "combined_score": combined_score, "finding": finding,
                 })
-                self._update_intervention_guess(finding)
-                return RecallAction(
-                    type="quarantine", node_id=node_id,
-                    lot_id=lot_id, quantity=qty,
-                    rationale=f"Quarantining (conf={evidence_score:.2f})",
-                )
+
+        # Sort by combined score (highest first) → quarantine most-certain first
+        quarantine_candidates.sort(key=lambda c: c["combined_score"], reverse=True)
+
+        for candidate in quarantine_candidates:
+            self.nodes_quarantined.append(candidate["node_id"])
+            self.quarantine_decisions.append({
+                "node_id": candidate["node_id"], "lot_id": candidate["lot_id"],
+                "quantity": candidate["quantity"], "confidence": candidate["confidence"],
+            })
+            self._update_intervention_guess(candidate["finding"])
+            return RecallAction(
+                type="quarantine", node_id=candidate["node_id"],
+                lot_id=candidate["lot_id"], quantity=candidate["quantity"],
+                rationale=f"Quarantining (conf={candidate['combined_score']:.2f})",
+            )
+
 
         # Step 5: Notify and finalize
         if affected_nodes:
@@ -239,6 +271,20 @@ class InvestigatorAgent:
         match = re.search(r"\bLot[A-Za-z0-9_]+\b", observation.recall_notice)
         return match.group(0) if match else "LotA"
 
+    def _target_by_root_cause(self, uninspected: List[str], obs: RecallObservation) -> List[str]:
+        """Prioritize uninspected nodes that match the identified root cause pattern."""
+        candidates = obs.root_cause_candidates
+        targeted = []
+        for node_id in uninspected:
+            node_inv = obs.inventory.get(node_id, {})
+            if "mixing_event" in candidates and len(node_inv) > 1:
+                targeted.append(node_id)
+            elif "record_deletion" in candidates:
+                targeted.append(node_id)  # records_missing nodes are high priority
+            elif "lot_relabel" in candidates and node_inv:
+                targeted.append(node_id)
+        return targeted if targeted else uninspected
+
     def get_episode_summary(self) -> Dict[str, Any]:
         return {
             "nodes_visited": list(set(self.nodes_visited)),
@@ -250,4 +296,5 @@ class InvestigatorAgent:
             "exploration_rate": round(self.exploration_rate, 4),
             "belief_confidence": round(self.belief_confidence, 4),
             "intervention_guess": self.intervention_guess,
+            "contamination_curve": self._contamination_curve,
         }

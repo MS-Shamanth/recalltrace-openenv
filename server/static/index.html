@@ -1,149 +1,829 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RecallTrace OpenEnv</title>
+  <title>RecallTrace — Causal Inference via Adversarial Self-Play</title>
+  <meta name="description"
+    content="An RL agent that learns to infer hidden causal interventions in supply-chain contamination through adversarial self-play. Built for Meta PyTorch OpenEnv Hackathon.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=4">
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css?v=15">
 </head>
+
 <body>
+  <!-- Particle canvas background -->
+  <canvas id="particles-canvas"></canvas>
+
   <div class="page-shell">
-    <header class="hero">
-      <div class="hero-copy">
-        <span class="eyebrow">Safety-Critical OpenEnv Benchmark</span>
-        <h1>RecallTrace OpenEnv</h1>
-        <p class="hero-text">
-          A real-world supply-chain recall benchmark where agents must trace contaminated lots,
-          follow relabeled inventory lineage, inspect evidence, and quarantine only the unsafe stock.
-        </p>
-        <div class="badge-row">
-          <span class="badge">OpenEnv compliant</span>
-          <span class="badge">Deterministic grading</span>
-          <span class="badge">3 escalating tasks</span>
-          <span class="badge">Precision containment</span>
+    <!-- ===== HERO ===== -->
+    <header class="hero" id="hero">
+      <div class="hero-glow"></div>
+      <div class="hero-layout">
+        <div class="hero-content">
+          <h1 class="animate-in delay-1">
+            <span class="gradient-text">RecallTrace</span>
+          </h1>
+          <p class="hero-subtitle animate-in delay-2">Causal Inference via Adversarial Self-Play</p>
+          <p class="hero-desc animate-in delay-3">
+            An RL agent that doesn't just detect contamination — it infers the
+            <strong>hidden causal intervention</strong> behind it. Trained via adversarial
+            self-play where an adversary learns to hide better as the investigator reasons better.
+          </p>
+          <div class="hero-stats animate-in delay-4">
+            <div class="stat-pill">
+              <span class="stat-value" id="stat-f1">0.95+</span>
+              <span class="stat-label">F1 Score</span>
+            </div>
+            <div class="stat-pill">
+              <span class="stat-value" id="stat-nodes">3.1</span>
+              <span class="stat-label">Nodes/Episode</span>
+            </div>
+            <div class="stat-pill">
+              <span class="stat-value" id="stat-time">&lt;2s</span>
+              <span class="stat-label">CPU Training</span>
+            </div>
+            <div class="stat-pill">
+              <span class="stat-value" id="stat-episodes">200</span>
+              <span class="stat-label">Episodes</span>
+            </div>
+          </div>
+          <div class="hero-actions animate-in delay-5">
+            <button class="btn btn-primary btn-glow" id="btn-run-simulation" onclick="switchTab('simulation')">
+              <span class="btn-icon">▶</span> Run Simulation
+            </button>
+            <button class="btn btn-outline" onclick="switchTab('llmagent')">
+              <span class="btn-icon">🤖</span> Live LLM Demo
+            </button>
+          </div>
         </div>
-      </div>
-      <div class="hero-panel">
-        <div class="metric-card">
-          <span class="metric-label">Average baseline</span>
-          <strong id="metric-average">0.9677</strong>
-        </div>
-        <div class="metric-card">
-          <span class="metric-label">Hard task focus</span>
-          <strong>Mixed safe/unsafe inventory</strong>
-        </div>
-        <div class="metric-card">
-          <span class="metric-label">Judging edge</span>
-          <strong>Operational realism over toy mechanics</strong>
+
+        <div class="hero-visual animate-in delay-3">
+          <div class="glass-orb orb-1"></div>
+          <div class="glass-orb orb-2"></div>
+          <div class="hero-card">
+            <div class="hc-header">
+              <span class="hc-dot"></span>
+              <span>GPU Inference Status</span>
+            </div>
+            <div class="hc-body">
+              <div class="hc-line"><span>Engine</span> <strong>T4 GPU</strong></div>
+              <div class="hc-line"><span>Base Model</span> <strong>Qwen2.5-0.5B-Instruct</strong></div>
+              <div class="hc-line"><span>LoRA Adapter</span> <strong>RecallTrace (r=16)</strong></div>
+              <div class="hc-line"><span>Precision</span> <strong>4-bit (bitsandbytes)</strong></div>
+              <div class="hc-line hc-success">✅ System Online & Ready</div>
+            </div>
+          </div>
         </div>
       </div>
     </header>
 
-    <main class="dashboard-grid">
-      <section class="panel panel-accent">
-        <div class="panel-header">
-          <h2>Task Runner</h2>
-          <p>Choose a task and run the deterministic baseline to inspect the full trajectory.</p>
-        </div>
-        <div class="controls">
-          <label class="field">
-            <span>Task level</span>
-            <select id="task-select"></select>
-          </label>
-          <div class="button-row">
-            <button id="reset-button" class="button button-secondary">Reset Task</button>
-            <button id="run-button" class="button button-primary">Run Episode</button>
-            <button id="run-all-button" class="button button-ghost">Run All Tasks</button>
-          </div>
-        </div>
-        <div id="task-summary" class="task-summary"></div>
-      </section>
+    <!-- ===== TAB NAV ===== -->
+    <nav class="tab-nav" id="tab-nav">
+      <button class="tab-btn active" data-tab="training" onclick="switchTab('training')">
+        <span class="tab-icon">📈</span> Gradio Dashboard
+      </button>
+      <button class="tab-btn" data-tab="simulation" onclick="switchTab('simulation')">
+        <span class="tab-icon">🧠</span> Adversarial Engine
+      </button>
+      <button class="tab-btn" data-tab="llmagent" onclick="switchTab('llmagent')">
+        <span class="tab-icon">🤖</span> LLM Agent
+      </button>
+      <button class="tab-btn" data-tab="openenv" onclick="switchTab('openenv')">
+        <span class="tab-icon">⚡</span> OpenEnv Runner
+      </button>
+      <button class="tab-btn" data-tab="about" onclick="switchTab('about')">
+        <span class="tab-icon">📖</span> About
+      </button>
+    </nav>
 
-      <section class="panel">
-        <div class="panel-header">
-          <h2>Scoreboard</h2>
-          <p>Live summary of the current task and the multi-task baseline run.</p>
-        </div>
-        <div class="score-grid">
-          <div class="score-card">
-            <span>Current score</span>
-            <strong id="current-score">-</strong>
+    <!-- ===== ADVERSARIAL ENGINE TAB ===== -->
+    <section class="tab-content" id="tab-simulation">
+      <div class="sim-grid">
+        <!-- Left: Graph Visualization -->
+        <div class="panel glass-panel">
+          <div class="panel-header">
+            <h2>Supply-Chain Graph</h2>
+            <div class="panel-badge" id="sim-status-badge">Ready</div>
           </div>
-          <div class="score-card">
-            <span>Steps taken</span>
-            <strong id="current-steps">-</strong>
-          </div>
-          <div class="score-card">
-            <span>Status</span>
-            <strong id="current-status">Ready</strong>
-          </div>
-          <div class="score-card">
-            <span>Average over all tasks</span>
-            <strong id="all-score">-</strong>
-          </div>
-        </div>
-        <div id="all-results" class="all-results empty-state">Run all tasks to compare easy, medium, and hard performance.</div>
-      </section>
-
-      <section class="panel panel-wide">
-        <div class="panel-header">
-          <h2>Episode Output</h2>
-          <p>Visual baseline trajectory, readable action summaries, and final grading highlights.</p>
-        </div>
-        <div class="episode-layout">
-          <div class="episode-visuals">
-            <div class="mini-panel">
-              <h3>Reward Curve</h3>
-              <div id="reward-chart" class="reward-chart empty-state">Run a task to render the reward trajectory.</div>
+          <div class="graph-container" id="graph-container">
+            <svg id="graph-svg" viewBox="0 0 800 500" preserveAspectRatio="xMidYMid meet">
+              <defs>
+                <filter id="glow">
+                  <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+                  <feMerge>
+                    <feMergeNode in="coloredBlur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+                <filter id="glow-strong">
+                  <feGaussianBlur stdDeviation="6" result="coloredBlur" />
+                  <feMerge>
+                    <feMergeNode in="coloredBlur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+                <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                  <polygon points="0 0, 10 3.5, 0 7" fill="rgba(255,255,255,0.2)" />
+                </marker>
+                <marker id="arrowhead-active" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+                  <polygon points="0 0, 10 3.5, 0 7" fill="#58a6ff" />
+                </marker>
+                <linearGradient id="contam-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" style="stop-color:#ff6b6b;stop-opacity:0.4" />
+                  <stop offset="100%" style="stop-color:#da3633;stop-opacity:0.1" />
+                </linearGradient>
+              </defs>
+              <g id="graph-edges"></g>
+              <g id="graph-nodes"></g>
+              <g id="graph-labels"></g>
+              <g id="graph-overlays"></g>
+            </svg>
+            <!-- Legend -->
+            <div class="graph-legend">
+              <div class="legend-item"><span class="legend-dot"
+                  style="background:#21262d;border:2px solid #444c56"></span> Unvisited</div>
+              <div class="legend-item"><span class="legend-dot"
+                  style="background:#2d2a1a;border:2px solid #f0c040"></span> Visited</div>
+              <div class="legend-item"><span class="legend-dot"
+                  style="background:#da3633;border:2px solid #ff6b6b"></span> Quarantined</div>
+              <div class="legend-item"><span class="legend-dot"
+                  style="background:#1a3a2a;border:2px solid #2ea043"></span> Safe</div>
+              <div class="legend-item"><span class="legend-ring"></span> Hidden contamination</div>
             </div>
-            <div class="mini-panel">
-              <h3>Final Outcome</h3>
-              <div id="final-summary" class="final-summary empty-state">Readable scoring highlights will appear here.</div>
+          </div>
+        </div>
+
+        <!-- Right: Controls + Belief State -->
+        <div class="sim-right">
+          <!-- Controls -->
+          <div class="panel glass-panel">
+            <div class="panel-header">
+              <h2>Controls</h2>
+            </div>
+            <div class="control-group">
+              <div class="control-row">
+                <label class="control-label">Episodes</label>
+                <input type="range" id="episode-slider" min="50" max="500" value="200" step="50" class="range-input">
+                <span class="range-value" id="episode-value">200</span>
+              </div>
+              <div class="control-row">
+                <label class="control-label">Graph Nodes</label>
+                <input type="range" id="nodes-slider" min="6" max="20" value="10" step="2" class="range-input">
+                <span class="range-value" id="nodes-value">10</span>
+              </div>
+              <div class="btn-group">
+                <button class="btn btn-primary btn-glow" id="btn-train" onclick="runSelfPlay()">
+                  <span class="btn-icon">🚀</span> Train Self-Play
+                </button>
+                <button class="btn btn-secondary" id="btn-replay" onclick="runReplay()">
+                  <span class="btn-icon">🔄</span> Before/After
+                </button>
+              </div>
+            </div>
+            <!-- Progress -->
+            <div class="progress-container hidden" id="progress-container">
+              <div class="progress-bar">
+                <div class="progress-fill" id="progress-fill"></div>
+              </div>
+              <span class="progress-text" id="progress-text">Training...</span>
             </div>
           </div>
-          <div id="episode-log" class="episode-log empty-state">Run a task to populate the episode trajectory.</div>
-        </div>
-      </section>
 
-      <section class="panel">
-        <div class="panel-header">
-          <h2>Judge Lens</h2>
-        </div>
-        <div class="highlight-stack">
-          <div class="highlight-card">
-            <span class="highlight-title">Real-world utility</span>
-            <p>Models a safety-critical recall workflow that QA, operations, and supply-chain teams actually perform.</p>
+          <!-- Belief State -->
+          <div class="panel glass-panel">
+            <div class="panel-header">
+              <h2>Belief State</h2>
+              <div class="panel-badge" id="belief-step">Step 0</div>
+            </div>
+            <div class="belief-bars" id="belief-bars">
+              <div class="belief-empty">Run simulation to see belief state</div>
+            </div>
           </div>
-          <div class="highlight-card">
-            <span class="highlight-title">Frontier challenge</span>
-            <p>The hard task forces precision containment of mixed safe and unsafe stock under partial observability.</p>
-          </div>
-          <div class="highlight-card">
-            <span class="highlight-title">Benchmark quality</span>
-            <p>Deterministic graders evaluate precision, coverage, investigation depth, and efficiency with reproducible scores.</p>
-          </div>
-        </div>
-      </section>
 
-      <section class="panel">
+          <!-- Episode Stats -->
+          <div class="panel glass-panel">
+            <div class="panel-header">
+              <h2>Episode Stats</h2>
+            </div>
+            <div class="stats-grid" id="episode-stats">
+              <div class="mini-stat">
+                <span class="mini-stat-label">F1 Score</span>
+                <span class="mini-stat-value" id="ep-f1">—</span>
+              </div>
+              <div class="mini-stat">
+                <span class="mini-stat-label">Quarantined</span>
+                <span class="mini-stat-value" id="ep-quarantined">—</span>
+              </div>
+              <div class="mini-stat">
+                <span class="mini-stat-label">Steps</span>
+                <span class="mini-stat-value" id="ep-steps">—</span>
+              </div>
+              <div class="mini-stat">
+                <span class="mini-stat-label">Intervention</span>
+                <span class="mini-stat-value" id="ep-intervention">—</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Before / After Comparison -->
+      <div class="panel glass-panel comparison-panel hidden" id="comparison-panel">
         <div class="panel-header">
-          <h2>Project Hub</h2>
+          <h2>Before vs After Self-Play Training</h2>
+          <p class="panel-subtitle">Investigator behavior change: spray & pray → precision targeting</p>
         </div>
-        <div class="link-list">
-          <a href="/health" target="_blank" rel="noreferrer">Health endpoint</a>
-          <a href="/reset" target="_blank" rel="noreferrer">Reset endpoint</a>
-          <a href="/tasks" target="_blank" rel="noreferrer">Task catalog JSON</a>
-          <a href="https://github.com/MS-Shamanth/recalltrace-openenv/tree/sham" target="_blank" rel="noreferrer">GitHub source</a>
-          <a href="https://huggingface.co/spaces/ms-shamanth/recalltrace-openenv/tree/main" target="_blank" rel="noreferrer">Space files</a>
-          <a href="https://www.docker.com/" target="_blank" rel="noreferrer">Docker runtime</a>
-          <a href="https://github.com/openenvai/openenv" target="_blank" rel="noreferrer">OpenEnv ecosystem</a>
+        <div class="comparison-grid">
+          <div class="comparison-card bad">
+            <div class="comparison-title">
+              <span class="comparison-dot red"></span>
+              Episode <span id="comp-early-ep">5</span> (Untrained)
+            </div>
+            <div class="comparison-f1" id="comp-early-f1">F1 = 0.28</div>
+            <div class="comparison-stats" id="comp-early-stats"></div>
+          </div>
+          <div class="comparison-arrow">→</div>
+          <div class="comparison-card good">
+            <div class="comparison-title">
+              <span class="comparison-dot green"></span>
+              Episode <span id="comp-late-ep">195</span> (Trained)
+            </div>
+            <div class="comparison-f1" id="comp-late-f1">F1 = 0.95</div>
+            <div class="comparison-stats" id="comp-late-stats"></div>
+          </div>
         </div>
-      </section>
-    </main>
+      </div>
+    </section>
+
+    <!-- ===== LLM AGENT TAB ===== -->
+    <section class="tab-content" id="tab-llmagent">
+      <div class="llm-hero">
+        <div class="panel glass-panel">
+          <div class="panel-header">
+            <h2>🤖 Live LLM Agent Demo</h2>
+            <div class="panel-badge" id="llm-status-badge">Checking GPU...</div>
+          </div>
+          <p class="llm-desc">
+            Watch the <strong>fine-tuned Qwen2.5-0.5B</strong> model investigate a supply-chain
+            contamination in real-time. The model was trained via SFT on 3,500 expert demonstrations
+            using <a href="https://github.com/unslothai/unsloth" target="_blank">Unsloth</a> + TRL.
+          </p>
+          <div class="llm-controls">
+            <select id="llm-task-select" class="llm-select">
+              <option value="">🎲 Random Task</option>
+            </select>
+            <button class="btn btn-primary btn-glow" id="btn-llm-run" onclick="runLLMEpisode()">
+              <span class="btn-icon">▶</span> Run LLM Agent (Demo)
+            </button>
+            <button class="btn btn-secondary" id="btn-llm-default-ds" onclick="runDefaultDataset()">
+              <span class="btn-icon">⚡</span> Run using fretfch dataset
+            </button>
+            <button class="btn btn-secondary" id="btn-llm-dataset" onclick="document.getElementById('dataset-file-input').click()">
+              <span class="btn-icon">📂</span> Upload Dataset
+            </button>
+            <input type="file" id="dataset-file-input" accept=".json,.csv" style="display:none" onchange="handleDatasetUpload(event)">
+          </div>
+          <div class="progress-container hidden" id="llm-progress">
+            <div class="progress-bar">
+              <div class="progress-fill" id="llm-progress-fill"></div>
+            </div>
+            <span class="progress-text" id="llm-progress-text">Loading model...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dataset Evaluation Results -->
+      <div class="llm-results hidden" id="dataset-results">
+        <div class="panel glass-panel">
+          <div class="panel-header">
+            <h2>📊 Dataset Evaluation Results</h2>
+            <div class="panel-badge" id="dataset-name-badge">—</div>
+          </div>
+          <div class="score-grid">
+            <div class="score-card">
+              <span>Dataset</span>
+              <strong id="ds-name" style="font-size:0.85em">—</strong>
+            </div>
+            <div class="score-card">
+              <span>Scenarios</span>
+              <strong id="ds-count">—</strong>
+            </div>
+            <div class="score-card">
+              <span>Avg F1</span>
+              <strong id="ds-f1" style="color:#2ea043">—</strong>
+            </div>
+            <div class="score-card">
+              <span>Avg Reward</span>
+              <strong id="ds-reward">—</strong>
+            </div>
+          </div>
+          <div id="ds-scenario-list" class="oe-log-area" style="max-height:300px;overflow-y:auto;"></div>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div class="llm-results hidden" id="llm-results">
+        <!-- Score Cards -->
+        <div class="panel glass-panel">
+          <div class="panel-header">
+            <h2>Episode Result</h2>
+          </div>
+          <div class="score-grid">
+            <div class="score-card">
+              <span>Final Score</span>
+              <strong id="llm-score" style="color:#2ea043">—</strong>
+            </div>
+            <div class="score-card">
+              <span>Total Reward</span>
+              <strong id="llm-reward">—</strong>
+            </div>
+            <div class="score-card">
+              <span>Steps Taken</span>
+              <strong id="llm-steps">—</strong>
+            </div>
+            <div class="score-card">
+              <span>Task</span>
+              <strong id="llm-task-name" style="font-size:0.85em">—</strong>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step-by-Step Log -->
+        <div class="panel glass-panel">
+          <div class="panel-header">
+            <h2>Step-by-Step Agent Actions</h2>
+            <p class="panel-subtitle">Each step shows the model's raw JSON output and the action taken</p>
+          </div>
+          <div id="llm-episode-log" class="oe-log-area"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== GRADIO DASHBOARD TAB ===== -->
+    <section class="tab-content active" id="tab-training">
+      
+      <!-- Inner Tabs -->
+      <nav class="inner-tab-nav" id="gradio-tab-nav">
+        <button class="inner-tab-btn active" data-tab="g-heuristic" onclick="switchGradioTab('g-heuristic')">Heuristic Self-Play</button>
+        <button class="inner-tab-btn" data-tab="g-rl" onclick="switchGradioTab('g-rl')">PyTorch RL Agent</button>
+        <button class="inner-tab-btn" data-tab="g-arch" onclick="switchGradioTab('g-arch')">Architecture</button>
+      </nav>
+
+      <!-- 1. Heuristic Tab -->
+      <div class="gradio-tab-content active" id="tab-g-heuristic">
+        <h3 class="gradio-section-title">Adaptive Heuristic Agent (200 episodes, ~4s on CPU)</h3>
+        <button class="gradio-run-btn" id="btn-run-heuristic" onclick="runGradioHeuristic()">Run Heuristic Training (200 episodes)</button>
+        
+        <div class="gradio-stats-row">
+          <div class="gradio-stat-box">
+            <label>F1 Score (Early → Late)</label>
+            <input type="text" id="g-heu-f1" readonly placeholder="—">
+          </div>
+          <div class="gradio-stat-box">
+            <label>Quarantined (Early → Late)</label>
+            <input type="text" id="g-heu-q" readonly placeholder="—">
+          </div>
+        </div>
+
+        <nav class="plot-tab-nav" id="heu-plot-nav">
+          <button class="plot-tab-btn active" onclick="switchPlot('heu', 'Training Curves', this)">Training Curves</button>
+          <button class="plot-tab-btn" onclick="switchPlot('heu', 'Co-Evolution', this)">Co-Evolution</button>
+          <button class="plot-tab-btn" onclick="switchPlot('heu', 'F1 Curve', this)">F1 Curve</button>
+          <button class="plot-tab-btn" onclick="switchPlot('heu', 'Belief Calibration', this)">Belief Calibration</button>
+          <button class="plot-tab-btn" onclick="switchPlot('heu', 'Episode Comparison', this)">Episode Comparison</button>
+          <button class="plot-tab-btn" onclick="switchPlot('heu', 'Training Log', this)">Training Log</button>
+        </nav>
+
+        <div class="plot-container">
+          <img id="heu-plot-img" class="gradio-plot-img hidden" src="" />
+          <textarea id="heu-plot-log" class="gradio-log hidden" readonly></textarea>
+          <div id="heu-plot-placeholder" class="chart-empty">Click "Run Heuristic Training" to generate plots</div>
+        </div>
+      </div>
+
+      <!-- 2. PyTorch RL Agent Tab -->
+      <div class="gradio-tab-content hidden" id="tab-g-rl">
+        <h3 class="gradio-section-title">Neural Policy Network trained with REINFORCE (200 episodes)</h3>
+        <button class="gradio-run-btn" id="btn-run-rl" onclick="runGradioRL()">Train PyTorch RL Policy (200 episodes)</button>
+        
+        <div class="gradio-stats-row">
+          <div class="gradio-stat-box">
+            <label>F1 Score (Early → Late)</label>
+            <input type="text" id="g-rl-f1" readonly placeholder="—">
+          </div>
+          <div class="gradio-stat-box">
+            <label>Quarantined (Early → Late)</label>
+            <input type="text" id="g-rl-q" readonly placeholder="—">
+          </div>
+          <div class="gradio-stat-box">
+            <label>Final Loss</label>
+            <input type="text" id="g-rl-loss" readonly placeholder="—">
+          </div>
+        </div>
+
+        <section class="rl-architecture-panel">
+          <div class="rl-architecture-header">
+            <span class="section-kicker">PyTorch RL Agent</span>
+            <h3>System Architecture</h3>
+          </div>
+
+          <div class="arch-grid">
+            <div class="arch-card">
+              <h3 class="arch-agent-1">Investigator (Agent 1)</h3>
+              <p>Uses 7 tools to investigate. Maintains belief state P(contaminated) per node. Must identify the hidden intervention type before quarantining.</p>
+              <div class="tool-badges">
+                <span class="tool-badge">inspect_node</span>
+                <span class="tool-badge">trace_lot</span>
+                <span class="tool-badge">cross_reference</span>
+                <span class="tool-badge">request_lab_test</span>
+                <span class="tool-badge">quarantine</span>
+                <span class="tool-badge">notify</span>
+                <span class="tool-badge">finalize</span>
+              </div>
+            </div>
+
+            <div class="arch-card">
+              <h3 class="arch-agent-2">Adversary (Agent 2)</h3>
+              <p>Chooses which intervention to apply and where, maximizing investigator failure. 18-cell score table (type x region x density) adapts via EMA.</p>
+              <div class="tool-badges">
+                <span class="adv-badge">lot_relabel</span>
+                <span class="adv-badge">mixing_event</span>
+                <span class="adv-badge">record_deletion</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="arch-reward-card">
+            <h3 class="arch-reward-title">Composable Reward Function (Ungameable)</h3>
+            <table class="arch-table">
+              <tr><td class="r-recall">Recall</td><td>+2.0 x (unsafe caught / total unsafe)</td><td class="r-desc">Forces finding contamination</td></tr>
+              <tr><td class="r-precision">Precision</td><td>-1.5 x (safe blocked / total safe)</td><td class="r-desc">Prevents spray &amp; pray</td></tr>
+              <tr><td class="r-calib">Calibration</td><td>+0.3 x (quarantined / total unsafe) if P &gt; 0.8</td><td class="r-desc">Rewards confident decisions</td></tr>
+              <tr><td class="r-eff">Efficiency</td><td>-0.05 per step + speed bonus</td><td class="r-desc">Encourages fast investigation</td></tr>
+            </table>
+          </div>
+
+          <div class="arch-card rl-network-card">
+            <h3 class="arch-rl-title">PyTorch RL Architecture</h3>
+            <pre class="arch-pre">
+StateEncoder (112-dim)
+  |-- Per-node features (12 nodes x 8 features)
+  |    inventory, inspected, quarantined, evidence_strength, ...
+  |-- Global features (16-dim)
+       steps, budget, coverage, urgency, evidence_counts, ...
+
+PolicyNetwork (MLP)
+  |-- SharedBackbone: Linear(112,128) -> LN -> ReLU -> Linear(128,64) -> LN -> ReLU
+  |-- ActionHead:     Linear(64, 7)   -> Categorical sampling
+  |-- NodeHead:       Linear(64, 12)  -> Categorical sampling
+  |-- ValueHead:      Linear(64, 1)   -> Baseline for variance reduction
+
+Training: REINFORCE + learned baseline + entropy regularization
+  |-- gamma=0.99, entropy_coef=0.02, lr=3e-4
+  |-- Gradient clipping: max_norm=0.5
+            </pre>
+          </div>
+        </section>
+
+        <nav class="plot-tab-nav" id="rl-plot-nav">
+          <button class="plot-tab-btn active" onclick="switchPlot('rl', 'RL Training Curves', this)">RL Training Curves</button>
+          <button class="plot-tab-btn" onclick="switchPlot('rl', 'RL Co-Evolution', this)">RL Co-Evolution</button>
+          <button class="plot-tab-btn" onclick="switchPlot('rl', 'RL F1 Curve', this)">RL F1 Curve</button>
+          <button class="plot-tab-btn" onclick="switchPlot('rl', 'RL Belief Calibration', this)">RL Belief Calibration</button>
+          <button class="plot-tab-btn" onclick="switchPlot('rl', 'RL Nodes Quarantined', this)">RL Nodes Quarantined</button>
+          <button class="plot-tab-btn" onclick="switchPlot('rl', 'RL Steps To Finalize', this)">RL Steps To Finalize</button>
+          <button class="plot-tab-btn" onclick="switchPlot('rl', 'RL Episode Comparison', this)">RL Episode Comparison</button>
+          <button class="plot-tab-btn" onclick="switchPlot('rl', 'Training Log', this)">Training Log</button>
+        </nav>
+
+        <div class="plot-container">
+          <img id="rl-plot-img" class="gradio-plot-img hidden" src="" />
+          <textarea id="rl-plot-log" class="gradio-log hidden" readonly></textarea>
+          <div id="rl-plot-placeholder" class="chart-empty">Click "Train PyTorch RL Policy" to generate plots</div>
+        </div>
+      </div>
+
+      <!-- 3. Architecture Tab -->
+      <div class="gradio-tab-content hidden" id="tab-g-arch">
+        <div class="arch-container">
+            <h2 class="arch-title">System Architecture</h2>
+
+            <!-- Embedded Architecture Diagram -->
+            <div style="background: #0a0a12; border-radius: 16px; border: 1px solid rgba(255,255,255,0.06); overflow: hidden; margin-bottom: 24px;">
+              <iframe src="/static/architecture.html" style="width: 100%; height: 700px; border: none; border-radius: 16px;"></iframe>
+            </div>
+
+            <div class="arch-grid">
+                <div class="arch-card">
+                    <h3 class="arch-agent-1">Investigator (Agent 1)</h3>
+                    <p>Uses 7 tools to investigate. Maintains belief state P(contaminated) per node. Must identify the hidden intervention type before quarantining.</p>
+                    <div class="tool-badges">
+                        <span class="tool-badge">inspect_node</span> <span class="tool-badge">trace_lot</span>
+                        <span class="tool-badge">cross_reference</span> <span class="tool-badge">request_lab_test</span>
+                        <span class="tool-badge">quarantine</span> <span class="tool-badge">notify</span> <span class="tool-badge">finalize</span>
+                    </div>
+                </div>
+
+                <div class="arch-card">
+                    <h3 class="arch-agent-2">Adversary (Agent 2)</h3>
+                    <p>Chooses which intervention to apply and where, maximizing investigator failure. 18-cell score table (type x region x density) adapts via EMA.</p>
+                    <div class="tool-badges">
+                        <span class="adv-badge">lot_relabel</span> <span class="adv-badge">mixing_event</span> <span class="adv-badge">record_deletion</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="arch-reward-card">
+                <h3 class="arch-reward-title">Composable Reward Function (Ungameable)</h3>
+                <table class="arch-table">
+                    <tr><td class="r-recall">Recall</td><td>+2.0 x (unsafe caught / total unsafe)</td><td class="r-desc">Forces finding contamination</td></tr>
+                    <tr><td class="r-precision">Precision</td><td>-1.5 x (safe blocked / total safe)</td><td class="r-desc">Prevents spray & pray</td></tr>
+                    <tr><td class="r-calib">Calibration</td><td>+0.3 x (quarantined / total unsafe) if P > 0.8</td><td class="r-desc">Rewards confident decisions</td></tr>
+                    <tr><td class="r-eff">Efficiency</td><td>-0.05 per step + speed bonus</td><td class="r-desc">Encourages fast investigation</td></tr>
+                </table>
+            </div>
+
+            <section class="coevolution-explainer compact" aria-labelledby="arch-coevolution-title">
+                <div class="coevolution-heading">
+                    <span class="section-kicker">Learning Dynamics</span>
+                    <h3 id="arch-coevolution-title">Adaptive Co-Evolution Loop</h3>
+                    <p>
+                        As the Investigator learns, the Adversary reshapes the curriculum. Mastered
+                        cells are down-weighted, novel attacks are sampled more often, and Matplotlib
+                        buffers the telemetry into readable training curves.
+                    </p>
+                </div>
+
+                <div class="coevolution-grid">
+                    <article class="coevolution-card">
+                        <span class="card-label">Score Table</span>
+                        <strong>18 dynamic cells</strong>
+                        <p>Intervention type x graph region x density bucket.</p>
+                    </article>
+                    <article class="coevolution-card">
+                        <span class="card-label">Sampler</span>
+                        <strong>Temperature Softmax</strong>
+                        <p>Balances pressure on hard cases with exploration of new scenarios.</p>
+                    </article>
+                    <article class="coevolution-card">
+                        <span class="card-label">Feedback</span>
+                        <strong>High F1 reduces reuse</strong>
+                        <p>When the Investigator solves a scenario, that cell becomes less likely.</p>
+                    </article>
+                </div>
+
+                <div class="curve-cards">
+                    <div class="curve-card">
+                        <span>RL F1 Curve</span>
+                        <p>Accuracy expands across episodes.</p>
+                    </div>
+                    <div class="curve-card">
+                        <span>RL Training Curve</span>
+                        <p>Policy loss is tracked against reward.</p>
+                    </div>
+                    <div class="curve-card">
+                        <span>Co-Evolution Curve</span>
+                        <p>Adversary success dips as Investigator capability rises.</p>
+                    </div>
+                </div>
+            </section>
+
+            <div class="arch-card">
+                <h3 class="arch-rl-title">PyTorch RL Architecture</h3>
+                <pre class="arch-pre">
+StateEncoder (112-dim)
+  |-- Per-node features (12 nodes x 8 features)
+  |    inventory, inspected, quarantined, evidence_strength, ...
+  |-- Global features (16-dim)
+       steps, budget, coverage, urgency, evidence_counts, ...
+
+PolicyNetwork (MLP)
+  |-- SharedBackbone: Linear(112,128) -> LN -> ReLU -> Linear(128,64) -> LN -> ReLU
+  |-- ActionHead:     Linear(64, 7)   -> Categorical sampling
+  |-- NodeHead:       Linear(64, 12)  -> Categorical sampling
+  |-- ValueHead:      Linear(64, 1)   -> Baseline for variance reduction
+
+Training: REINFORCE + learned baseline + entropy regularization
+  |-- gamma=0.99, entropy_coef=0.02, lr=3e-4
+  |-- Gradient clipping: max_norm=0.5
+                </pre>
+            </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== OPENENV RUNNER TAB ===== -->
+    <section class="tab-content" id="tab-openenv">
+      <div class="openenv-grid">
+        <div class="panel glass-panel">
+          <div class="panel-header">
+            <h2>Task Runner</h2>
+            <p class="panel-subtitle">Run the deterministic baseline on OpenEnv tasks</p>
+          </div>
+          <div class="controls">
+            <label class="field">
+              <span>Task level</span>
+              <select id="task-select"></select>
+            </label>
+            <div class="btn-group">
+              <button id="reset-button" class="btn btn-secondary" onclick="resetTask()">Reset Task</button>
+              <button id="run-button" class="btn btn-primary" onclick="runOpenEnvEpisode()">Run Episode</button>
+              <button id="run-all-button" class="btn btn-outline" onclick="runAllTasks()">Run All Tasks</button>
+            </div>
+          </div>
+          <div id="task-summary" class="task-summary-box"></div>
+        </div>
+
+        <div class="panel glass-panel">
+          <div class="panel-header">
+            <h2>Scoreboard</h2>
+          </div>
+          <div class="score-grid">
+            <div class="score-card">
+              <span>Current score</span>
+              <strong id="current-score">—</strong>
+            </div>
+            <div class="score-card">
+              <span>Steps taken</span>
+              <strong id="current-steps">—</strong>
+            </div>
+            <div class="score-card">
+              <span>Status</span>
+              <strong id="current-status">Ready</strong>
+            </div>
+            <div class="score-card">
+              <span>Average (all tasks)</span>
+              <strong id="all-score">—</strong>
+            </div>
+          </div>
+          <div id="all-results" class="all-results-box">Run all tasks to compare performance.</div>
+        </div>
+
+        <div class="panel glass-panel panel-wide">
+          <div class="panel-header">
+            <h2>Episode Log</h2>
+          </div>
+          <div class="oe-layout">
+            <div class="oe-visuals">
+              <div class="mini-panel-box">
+                <h3>Reward Curve</h3>
+                <div id="oe-reward-chart" class="oe-chart-area">Run a task to see rewards.</div>
+              </div>
+              <div class="mini-panel-box">
+                <h3>Final Outcome</h3>
+                <div id="oe-final-summary" class="oe-summary-area">Scoring highlights appear here.</div>
+              </div>
+            </div>
+            <div id="oe-episode-log" class="oe-log-area">Run a task to populate the trajectory.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+
+
+    <!-- ===== ABOUT TAB ===== -->
+    <section class="tab-content" id="tab-about">
+      <div class="about-grid">
+        <div class="panel glass-panel panel-wide">
+          <div class="panel-header">
+            <h2>RecallTrace Architecture & Environment Flow</h2>
+          </div>
+          <div style="padding: 20px; color: #c9d1d9; font-size: 1rem; line-height: 1.6;">
+            <p style="margin-bottom: 20px;">The RecallTrace Hugging Face Space operates as a Python-based Gradio application hosting an OpenEnv-compliant causal inference benchmark. At its core, the system runs a two-agent adversarial self-play loop. In this environment, an <strong>Investigator</strong> must identify and isolate a hidden contamination event within a procedurally generated, partially observable supply graph. An opposing <strong>Adversary</strong> intelligently places these interventions to maximize the Investigator's failure rate. The environment enforces an ungameable, composable reward function that computes a final score based on Recall (catching unsafe nodes), Precision (sparing safe nodes), Belief Calibration (making confident decisions), and Efficiency (using fewer steps).</p>
+
+            <h3 style="color: #f97316; margin-bottom: 12px; font-size: 1.2rem;">The Adaptive Heuristic Search</h3>
+            <p style="margin-bottom: 20px;">The Heuristic Investigator serves as an interpretable, fast-adapting baseline. Instead of neural networks, this agent uses dynamic, rule-based heuristics governed by learnable thresholds (e.g., quarantine confidence limits and "trust" in ambiguous lab results). After every episode, the agent calculates its F1 score (the harmonic mean of its precision and recall accuracy). If the F1 score dips, the agent adjusts its internal thresholds using an Exponential Moving Average (EMA). This allows the heuristic search to continuously tune its exploration and exploitation strategies dynamically, finding optimal paths through the causal graph with a very low computational footprint.</p>
+
+            <h3 style="color: #38bdf8; margin-bottom: 12px; font-size: 1.2rem;">The PyTorch RL Agent</h3>
+            <p style="margin-bottom: 20px;">The PyTorch RL Investigator is powered by a Deep Reinforcement Learning policy network. Because the environment's observation space is variable (graphs change size, inventory fluctuates), the architecture utilizes a <code>StateEncoder</code> to map the raw observation dictionaries into a fixed 112-dimensional feature tensor. This tensor is fed into a Multi-Layer Perceptron (MLP) equipped with three distinct output heads: an <strong>Action Head</strong> (to select one of the 7 tools), a <strong>Node Head</strong> (to target a specific node), and a <strong>Value Head</strong> (to predict the baseline reward). The model is trained using the <strong>REINFORCE</strong> algorithm. To ensure stable learning, the Value Head serves as a learned baseline to reduce variance, while an underlying entropy regularization coefficient forces the model to maintain exploration, preventing it from collapsing into trivial behaviors like quarantining every node immediately.</p>
+
+            <section class="coevolution-explainer" aria-labelledby="coevolution-title">
+              <div class="coevolution-heading">
+                <span class="section-kicker">Adaptive Curriculum</span>
+                <h3 id="coevolution-title">Adversarial Co-Evolution &amp; Plot Generation</h3>
+                <p>
+                  As the Investigator improves, the training environment shifts with it. The
+                  Adversary samples harder scenarios, then backs away from cells the Investigator has
+                  already mastered.
+                </p>
+              </div>
+
+              <div class="coevolution-grid">
+                <article class="coevolution-card">
+                  <span class="card-label">Attack Sampler</span>
+                  <strong>18-cell score table</strong>
+                  <p>Cross-references intervention type, graph region, and density bucket.</p>
+                </article>
+                <article class="coevolution-card">
+                  <span class="card-label">Exploration</span>
+                  <strong>Temperature Softmax</strong>
+                  <p>Samples attacks probabilistically so the adversary keeps trying fresh patterns.</p>
+                </article>
+                <article class="coevolution-card">
+                  <span class="card-label">Adaptation Rule</span>
+                  <strong>High F1 penalizes the cell</strong>
+                  <p>Expertly solved scenarios become less likely, pushing the curriculum forward.</p>
+                </article>
+              </div>
+
+              <div class="coevolution-flow" aria-label="Co-evolution loop">
+                <div class="flow-step">
+                  <span>01</span>
+                  <strong>Investigator learns</strong>
+                  <p>F1 improves as the policy identifies hidden interventions more precisely.</p>
+                </div>
+                <div class="flow-connector" aria-hidden="true">&rarr;</div>
+                <div class="flow-step">
+                  <span>02</span>
+                  <strong>Adversary reweights</strong>
+                  <p>Successful cells are penalized and unexplored regions gain sampling pressure.</p>
+                </div>
+                <div class="flow-connector" aria-hidden="true">&rarr;</div>
+                <div class="flow-step">
+                  <span>03</span>
+                  <strong>Telemetry buffers</strong>
+                  <p>Matplotlib continuously records accuracy, loss, reward, and adversary success.</p>
+                </div>
+              </div>
+
+              <div class="curve-cards">
+                <div class="curve-card">
+                  <span>RL F1 Curve</span>
+                  <p>Tracks the agent's expanding accuracy across episodes.</p>
+                </div>
+                <div class="curve-card">
+                  <span>RL Training Curve</span>
+                  <p>Compares REINFORCE policy loss against reward.</p>
+                </div>
+                <div class="curve-card">
+                  <span>Co-Evolution Curve</span>
+                  <p>Shows the arms race: adversary success dips as Investigator capability rises.</p>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div class="panel glass-panel">
+          <div class="panel-header">
+            <h2>Theme & Architecture</h2>
+          </div>
+          <div class="theme-cards">
+            <div class="theme-card">
+              <span class="theme-tag orange">Theme 3.1</span>
+              <h3>World Modeling</h3>
+              <p>Belief state tracking with P(contaminated) per node. Agent maintains probabilistic world model and
+                reasons under uncertainty.</p>
+            </div>
+            <div class="theme-card">
+              <span class="theme-tag teal">Architecture</span>
+              <h3>Dual-Agent Causal Inference</h3>
+              <p>Investigator and Adversary modules share the same environment loop, reward function, telemetry buffer,
+                and PyTorch policy architecture.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel glass-panel">
+          <div class="panel-header">
+            <h2>Links</h2>
+          </div>
+          <div class="link-grid">
+            <a href="/health" target="_blank" class="link-card">
+              <span class="link-icon">💚</span>
+              <span>Health Check</span>
+            </a>
+            <a href="/tasks" target="_blank" class="link-card">
+              <span class="link-icon">📋</span>
+              <span>Task Catalog</span>
+            </a>
+            <a href="https://github.com/MS-Shamanth/recalltrace-openenv" target="_blank" class="link-card">
+              <span class="link-icon">🔗</span>
+              <span>GitHub</span>
+            </a>
+            <a href="https://github.com/openenvai/openenv" target="_blank" class="link-card">
+              <span class="link-icon">🌐</span>
+              <span>OpenEnv</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== FOOTER ===== -->
+    <footer class="footer">
+      <p>RecallTrace — Causal Inference via Adversarial Self-Play</p>
+      <p class="footer-sub">Meta PyTorch OpenEnv Hackathon · Built by Shamanth</p>
+    </footer>
   </div>
-  <script src="/static/app.js?v=4"></script>
+
+  <script src="/static/app.js?v=15"></script>
 </body>
+
 </html>
