@@ -328,52 +328,138 @@
       </div>
     </section>
 
-    <!-- ===== TRAINING CURVES TAB ===== -->
+    <!-- ===== TRAINING CURVES TAB (GRADIO STYLE) ===== -->
     <section class="tab-content" id="tab-training">
-      <div class="charts-grid">
-        <div class="panel glass-panel chart-panel">
-          <div class="panel-header">
-            <h2>Investigator F1 Score</h2>
-            <div class="panel-badge green" id="chart-f1-badge">—</div>
+      
+      <!-- Inner Tabs -->
+      <nav class="inner-tab-nav" id="gradio-tab-nav">
+        <button class="inner-tab-btn active" data-tab="g-heuristic" onclick="switchGradioTab('g-heuristic')">Heuristic Self-Play</button>
+        <button class="inner-tab-btn" data-tab="g-rl" onclick="switchGradioTab('g-rl')">PyTorch RL Agent</button>
+        <button class="inner-tab-btn" data-tab="g-arch" onclick="switchGradioTab('g-arch')">Architecture</button>
+      </nav>
+
+      <!-- 1. Heuristic Tab -->
+      <div class="gradio-tab-content active" id="tab-g-heuristic">
+        <h3 class="gradio-section-title">Adaptive Heuristic Agent (200 episodes, ~4s on CPU)</h3>
+        <button class="gradio-run-btn" id="btn-run-heuristic" onclick="runGradioHeuristic()">Run Heuristic Training (200 episodes)</button>
+        
+        <div class="gradio-stats-row">
+          <div class="gradio-stat-box">
+            <label>F1 Score (Early → Late)</label>
+            <input type="text" id="g-heu-f1" readonly placeholder="—">
           </div>
-          <div class="chart-area" id="chart-f1">
-            <div class="chart-empty">Run self-play training to generate curves</div>
-          </div>
-        </div>
-        <div class="panel glass-panel chart-panel">
-          <div class="panel-header">
-            <h2>Adversary Reward</h2>
-            <div class="panel-badge red" id="chart-adv-badge">—</div>
-          </div>
-          <div class="chart-area" id="chart-adv">
-            <div class="chart-empty">Run self-play training to generate curves</div>
-          </div>
-        </div>
-        <div class="panel glass-panel chart-panel">
-          <div class="panel-header">
-            <h2>Nodes Quarantined</h2>
-            <div class="panel-badge" id="chart-q-badge">—</div>
-          </div>
-          <div class="chart-area" id="chart-quarantined">
-            <div class="chart-empty">Run self-play training to generate curves</div>
+          <div class="gradio-stat-box">
+            <label>Quarantined (Early → Late)</label>
+            <input type="text" id="g-heu-q" readonly placeholder="—">
           </div>
         </div>
-        <div class="panel glass-panel chart-panel">
-          <div class="panel-header">
-            <h2>Steps to Finalize</h2>
-            <div class="panel-badge" id="chart-s-badge">—</div>
-          </div>
-          <div class="chart-area" id="chart-steps">
-            <div class="chart-empty">Run self-play training to generate curves</div>
-          </div>
+
+        <nav class="plot-tab-nav" id="heu-plot-nav">
+          <button class="plot-tab-btn active" onclick="switchPlot('heu', 'Training Curves', this)">Training Curves</button>
+          <button class="plot-tab-btn" onclick="switchPlot('heu', 'Co-Evolution', this)">Co-Evolution</button>
+          <button class="plot-tab-btn" onclick="switchPlot('heu', 'F1 Curve', this)">F1 Curve</button>
+          <button class="plot-tab-btn" onclick="switchPlot('heu', 'Belief Calibration', this)">Belief Calibration</button>
+          <button class="plot-tab-btn" onclick="switchPlot('heu', 'Episode Comparison', this)">Episode Comparison</button>
+          <button class="plot-tab-btn" onclick="switchPlot('heu', 'Training Log', this)">Training Log</button>
+        </nav>
+
+        <div class="plot-container">
+          <img id="heu-plot-img" class="gradio-plot-img hidden" src="" />
+          <textarea id="heu-plot-log" class="gradio-log hidden" readonly></textarea>
+          <div id="heu-plot-placeholder" class="chart-empty">Click "Run Heuristic Training" to generate plots</div>
         </div>
       </div>
-      <!-- Summary Card -->
-      <div class="panel glass-panel summary-panel hidden" id="training-summary">
-        <div class="panel-header">
-          <h2>Training Summary</h2>
+
+      <!-- 2. PyTorch RL Agent Tab -->
+      <div class="gradio-tab-content hidden" id="tab-g-rl">
+        <h3 class="gradio-section-title">Neural Policy Network trained with REINFORCE (200 episodes)</h3>
+        <button class="gradio-run-btn" id="btn-run-rl" onclick="runGradioRL()">Train PyTorch RL Policy (200 episodes)</button>
+        
+        <div class="gradio-stats-row">
+          <div class="gradio-stat-box">
+            <label>F1 Score (Early → Late)</label>
+            <input type="text" id="g-rl-f1" readonly placeholder="—">
+          </div>
+          <div class="gradio-stat-box">
+            <label>Quarantined (Early → Late)</label>
+            <input type="text" id="g-rl-q" readonly placeholder="—">
+          </div>
+          <div class="gradio-stat-box">
+            <label>Final Loss</label>
+            <input type="text" id="g-rl-loss" readonly placeholder="—">
+          </div>
         </div>
-        <div class="summary-row" id="training-summary-content"></div>
+
+        <nav class="plot-tab-nav" id="rl-plot-nav">
+          <button class="plot-tab-btn active" onclick="switchPlot('rl', 'RL Training Curves', this)">RL Training Curves</button>
+          <button class="plot-tab-btn" onclick="switchPlot('rl', 'RL F1 Curve', this)">RL F1 Curve</button>
+          <button class="plot-tab-btn" onclick="switchPlot('rl', 'RL Co-Evolution', this)">RL Co-Evolution</button>
+          <button class="plot-tab-btn" onclick="switchPlot('rl', 'Training Log', this)">Training Log</button>
+        </nav>
+
+        <div class="plot-container">
+          <img id="rl-plot-img" class="gradio-plot-img hidden" src="" />
+          <textarea id="rl-plot-log" class="gradio-log hidden" readonly></textarea>
+          <div id="rl-plot-placeholder" class="chart-empty">Click "Train PyTorch RL Policy" to generate plots</div>
+        </div>
+      </div>
+
+      <!-- 3. Architecture Tab -->
+      <div class="gradio-tab-content hidden" id="tab-g-arch">
+        <div class="arch-container">
+            <h2 class="arch-title">System Architecture</h2>
+
+            <div class="arch-grid">
+                <div class="arch-card">
+                    <h3 class="arch-agent-1">Investigator (Agent 1)</h3>
+                    <p>Uses 7 tools to investigate. Maintains belief state P(contaminated) per node. Must identify the hidden intervention type before quarantining.</p>
+                    <div class="tool-badges">
+                        <span class="tool-badge">inspect_node</span> <span class="tool-badge">trace_lot</span>
+                        <span class="tool-badge">cross_reference</span> <span class="tool-badge">request_lab_test</span>
+                        <span class="tool-badge">quarantine</span> <span class="tool-badge">notify</span> <span class="tool-badge">finalize</span>
+                    </div>
+                </div>
+
+                <div class="arch-card">
+                    <h3 class="arch-agent-2">Adversary (Agent 2)</h3>
+                    <p>Chooses which intervention to apply and where, maximizing investigator failure. 18-cell score table (type x region x density) adapts via EMA.</p>
+                    <div class="tool-badges">
+                        <span class="adv-badge">lot_relabel</span> <span class="adv-badge">mixing_event</span> <span class="adv-badge">record_deletion</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="arch-reward-card">
+                <h3 class="arch-reward-title">Composable Reward Function (Ungameable)</h3>
+                <table class="arch-table">
+                    <tr><td class="r-recall">Recall</td><td>+2.0 x (unsafe caught / total unsafe)</td><td class="r-desc">Forces finding contamination</td></tr>
+                    <tr><td class="r-precision">Precision</td><td>-1.5 x (safe blocked / total safe)</td><td class="r-desc">Prevents spray & pray</td></tr>
+                    <tr><td class="r-calib">Calibration</td><td>+0.3 x (quarantined / total) if P > 0.8</td><td class="r-desc">Rewards confident decisions</td></tr>
+                    <tr><td class="r-eff">Efficiency</td><td>-0.05 per step + speed bonus</td><td class="r-desc">Encourages fast investigation</td></tr>
+                </table>
+            </div>
+
+            <div class="arch-card">
+                <h3 class="arch-rl-title">PyTorch RL Architecture</h3>
+                <pre class="arch-pre">
+StateEncoder (112-dim)
+  |-- Per-node features (12 nodes x 8 features)
+  |    inventory, inspected, quarantined, evidence_strength, ...
+  |-- Global features (16-dim)
+       steps, budget, coverage, urgency, evidence_counts, ...
+
+PolicyNetwork (MLP)
+  |-- SharedBackbone: Linear(112,128) -> LN -> ReLU -> Linear(128,64) -> LN -> ReLU
+  |-- ActionHead:     Linear(64, 7)   -> Categorical sampling
+  |-- NodeHead:       Linear(64, 12)  -> Categorical sampling
+  |-- ValueHead:      Linear(64, 1)   -> Baseline for variance reduction
+
+Training: REINFORCE + learned baseline + entropy regularization
+  |-- gamma=0.99, entropy_coef=0.02, lr=3e-4
+  |-- Gradient clipping: max_norm=0.5
+                </pre>
+            </div>
+        </div>
       </div>
     </section>
 
