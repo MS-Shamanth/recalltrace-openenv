@@ -6,9 +6,10 @@ import json
 import re
 from typing import Any, Dict, Optional
 
-from openai import OpenAI
-
 from env.models import RecallAction, RecallObservation
+
+# openai is imported lazily inside choose_llm_action to avoid import errors
+# in environments where it is not installed (e.g. HF Jobs training runs).
 
 
 LOT_PATTERN = re.compile(r"\bLot[A-Za-z0-9_]+\b")
@@ -62,12 +63,17 @@ def choose_heuristic_action(observation: RecallObservation) -> RecallAction:
 
 
 def choose_llm_action(
-    client: Optional[OpenAI],
+    client: Optional[Any],
     model_name: str,
     observation: RecallObservation,
     history: list[dict[str, Any]],
 ) -> Optional[RecallAction]:
     """Ask an LLM for the next action, returning None on failure."""
+    try:
+        from openai import OpenAI  # noqa: F401 — lazy import, openai may not be installed
+    except ImportError:
+        return None
+
     if client is None:
         return None
 
